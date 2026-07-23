@@ -1,0 +1,8 @@
+{
+  "server_url": "http://ADMIN-PC-IP:8000/agent-heartbeat/",
+  "api_token": "drive-agent-local-token",
+  "heartbeat_seconds": 30,
+  "count_refresh_seconds": 300,
+  "file_batch_size": 500,
+  "change_debounce_seconds": 3
+}

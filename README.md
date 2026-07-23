@@ -1,0 +1,349 @@
+# Drive File Agent
+
+A Django admin dashboard for monitoring drive files on the server PC and seeing active user PCs that run the lightweight Drive Agent executable.
+
+The dashboard starts with `D:/` selected by default when it exists. The `Select Drive` control lists the available drives on the PC where the Django server is running. The new `Active Users` section is populated by remote user PCs that run `agent_client.py` or its packaged `.exe` and send heartbeat reports to the admin server.
+
+## Project File Structure
+
+```text
+Agent/
+|-- manage.py
+|-- requirements.txt
+|-- README.md
+|-- agent_client.py
+|-- agent_config.example.json
+|-- config/
+|   |-- settings.py
+|   |-- urls.py
+|   |-- asgi.py
+|   |-- wsgi.py
+|   `-- __init__.py
+`-- drivefiles/
+    |-- admin.py
+    |-- apps.py
+    |-- drive_config.py
+    |-- forms.py
+    |-- models.py
+    |-- scanner.py
+    |-- tests.py
+    |-- urls.py
+    |-- views.py
+    |-- migrations/
+    |   |-- 0001_initial.py
+    |   |-- 0002_activeagentdrive_activeagentfile.py
+    |   `-- __init__.py
+    |-- templates/
+    |   `-- drivefiles/
+    |       |-- drive_files.html
+    |       |-- login.html
+    |       `-- _file_rows.html
+    `-- static/
+        `-- drivefiles/
+            `-- css/
+                |-- auth.css
+                `-- dashboard.css
+```
+
+## Frontend
+
+The frontend uses Django templates and external CSS only.
+
+`drivefiles/templates/drivefiles/login.html`
+- Login and signup screen.
+- Password show/hide eye icon.
+- Creative animated left-side design.
+
+`drivefiles/templates/drivefiles/drive_files.html`
+- Main admin dashboard.
+- Shows file pull status, host name, IP address, MAC address, indexed file table, file type distribution, storage usage, and Active Users.
+- Includes one-minute idle logout, independent search bars, drive switching, pagination, filter menu, and Admin logout dropdown.
+
+`drivefiles/templates/drivefiles/_file_rows.html`
+- Reusable file table rows.
+- Shows file name, path, type, size, and Download action.
+
+`drivefiles/static/drivefiles/css/auth.css`
+- Login/signup page styling.
+
+`drivefiles/static/drivefiles/css/dashboard.css`
+- Dashboard styling, including the sidebar, cards, charts, file table, drive selector, Admin menu, and Active Users cards.
+
+## Backend
+
+`config/settings.py`
+- Django settings.
+- Uses SQLite with a timeout to reduce temporary `database is locked` errors.
+- Uses signed-cookie sessions.
+- Uses a randomized session cookie name so users must log in again after each server restart.
+- Reads `DRIVE_AGENT_API_TOKEN`, `DRIVE_AGENT_ONLINE_SECONDS`, and `DJANGO_ALLOWED_HOSTS` from environment variables.
+
+`drivefiles/models.py`
+- `ActiveAgent`: stores every authorized PC that runs the agent executable and reports to the admin dashboard.
+- `ActiveAgentDrive`: stores each drive reported by that PC, including totals and storage usage.
+- `ActiveAgentFile`: stores uploaded file metadata rows for each reported drive.
+
+`drivefiles/views.py`
+- Builds dashboard data.
+- Handles selected-drive scanning.
+- Handles real-time file search and pagination.
+- Handles secure file downloads.
+- Handles the Active Users JSON feed.
+- Handles `/agent-heartbeat/`, where installed agents report host, IP, MAC, drives, file counts, and storage usage.
+- Handles `/agent-files-batch/`, where installed agents upload file metadata in batches.
+- Handles `/agent-uninstall/`, where uninstalling agents remove themselves from Active Users.
+- Handles `/agent-ping/`, where the one-file EXE confirms it found the dashboard server during LAN discovery.
+- Handles `/select-agent/`, where the admin switches the dashboard to a selected active user's PC.
+
+Routes:
+
+```text
+/                    Dashboard
+/login/              Login page
+/signup/             Signup page
+/logout/             Logout endpoint
+/select-drive/       Dashboard drive selector
+/files-data/         Live file/search dashboard data
+/active-agents-data/ Live Active Users data
+/agent-ping/        Agent dashboard discovery API
+/agent-heartbeat/    Agent reporting API
+/agent-files-batch/ Agent file metadata batch API
+/agent-uninstall/   Agent uninstall/removal API
+/select-agent/      Select or clear an Active User dashboard
+/download/           File download endpoint
+/admin/              Django admin
+```
+
+## Local Scanner
+
+`drivefiles/drive_config.py`
+- Chooses the default drive.
+- Prefers `D:/` when available.
+- Discovers all available drives on the server PC.
+- Supports startup override with `DRIVE_AGENT_ROOT`.
+
+`drivefiles/scanner.py`
+- Scans the selected drive on the server PC.
+- Detects new, changed, and deleted files.
+- Excludes Recycle Bin and protected system folders.
+- Keeps per-drive in-memory cache for faster switching.
+- Publishes partial results while large drives are scanning.
+
+## User PC Agent
+
+`agent_client.py` is the lightweight reporting agent that is built into one self-installing `.exe`. The user download is kept at `agent_download/DriveAgent.exe`.
+
+When it runs on a user PC, it sends this PC information to the admin server:
+
+- Host name
+- IP address
+- MAC address
+- OS and architecture
+- Available drives
+- Drive storage usage
+- File counts per drive
+- File metadata per drive, including file name, path, type, size, and modified time
+
+It does not upload file contents.
+
+It uses built-in defaults so the user package needs only one file. The current default admin endpoint is:
+
+```text
+http://192.168.1.7:8000/agent-heartbeat/
+```
+
+For development, the same settings can still be overridden with environment variables or an optional sidecar `agent_config.json`.
+
+If that embedded IP is not reachable, the EXE scans the user's local `/24` LAN for a DriveAgent dashboard server on port `8000` by checking `/agent-ping/`. This keeps the one-file install working when the admin PC IP changes within the same network.
+
+Example `agent_config.json`:
+
+```json
+{
+  "server_url": "http://ADMIN-PC-IP:8000/agent-heartbeat/",
+  "api_token": "drive-agent-local-token",
+  "heartbeat_seconds": 30,
+  "count_refresh_seconds": 300,
+  "file_batch_size": 500,
+  "change_debounce_seconds": 3
+}
+```
+
+Use the same token on the admin server and every user agent.
+
+## Run Admin Dashboard
+
+```powershell
+python -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+.\venv\Scripts\python.exe manage.py migrate
+```
+
+For local-only testing:
+
+```powershell
+.\venv\Scripts\python.exe manage.py runserver
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+For user PCs on the same network to report to this admin dashboard, run the server on the network:
+
+```powershell
+$env:DRIVE_AGENT_API_TOKEN = "change-this-token"
+$env:DJANGO_ALLOWED_HOSTS = "*"
+.\venv\Scripts\python.exe manage.py runserver 0.0.0.0:8000
+```
+
+Then user agents should use:
+
+```text
+http://ADMIN-PC-IP:8000/agent-heartbeat/
+```
+
+## Run User Agent Without EXE
+
+On a user PC:
+
+```powershell
+$env:DRIVE_AGENT_SERVER_URL = "http://ADMIN-PC-IP:8000/agent-heartbeat/"
+$env:DRIVE_AGENT_API_TOKEN = "change-this-token"
+python agent_client.py
+```
+
+After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uploads file metadata in batches. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
+
+## Convert User Agent To EXE
+
+Install PyInstaller:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install pyinstaller
+```
+
+Build the one-file user executable:
+
+```powershell
+.\venv\Scripts\pyinstaller.exe --onefile --noconsole --name DriveAgent agent_client.py
+```
+
+Copy only this file to the user PC:
+
+```text
+agent_download/DriveAgent.exe
+```
+
+The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, it copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup for the current user, starts in the background, and reports that PC to `Active Users`.
+
+The user download folder intentionally contains only:
+
+```text
+agent_download/DriveAgent.exe
+```
+
+To remove the installed agent from a user PC, run this on that user PC:
+
+```powershell
+%LOCALAPPDATA%\DriveAgent\DriveAgent.exe --uninstall
+```
+
+If the admin dashboard is reachable during uninstall, the PC is removed from `Active Users`.
+
+## Select Or Change Drive
+
+Use the dashboard `Select Drive` control to switch the admin dashboard between available drives on the server PC. Files, storage usage, file type distribution, totals, and labels update for the selected drive.
+
+For startup override:
+
+```powershell
+$env:DRIVE_AGENT_ROOT = "<drive-letter>:/"
+.\venv\Scripts\python.exe manage.py runserver
+```
+
+Examples:
+
+```powershell
+$env:DRIVE_AGENT_ROOT = "C:/"
+$env:DRIVE_AGENT_ROOT = "D:/Projects"
+$env:DRIVE_AGENT_ROOT = "E:/"
+```
+
+## Main Features
+
+- Login and signup pages.
+- Password show/hide eye icon.
+- Login required for dashboard access.
+- Forced login again after server restart.
+- Auto logout after 1 minute of no mouse, keyboard, scroll, touch, or pointer activity.
+- Real-time file pull from the selected server drive.
+- `D:/` selected by default when available.
+- Select any available drive on the server PC.
+- Genuine file type distribution from scanned files.
+- Genuine storage usage from the selected drive.
+- New files appear near the top.
+- Deleted files reduce the file count.
+- Recycle/system folders are ignored.
+- Independent real-time search bars.
+- Download action for indexed files.
+- Active Users section for installed/running user agents.
+- Hostnames appear under the Active Users sidebar button.
+- Click an Active User to view that user's reported drives and files.
+- Select a reported drive for the selected Active User and the file table, storage card, file type distribution, totals, and host/IP/MAC area update to that PC.
+- User agents watch Windows drive changes and report changed drive data after additions, edits, and deletions.
+- Uninstalling the DriveAgent user package removes that PC from Active Users.
+- Agent heartbeat API protected by a shared token.
+
+## Sending The Project ZIP
+
+Do not zip the full folder with `venv/`, `.git/`, cache files, database files, or server logs. Those files make the ZIP large, and `venv/` contains executable files that email or WhatsApp can block for security.
+
+Send only the source files:
+
+```text
+manage.py
+requirements.txt
+README.md
+agent_client.py
+agent_config.example.json
+config/
+drivefiles/
+```
+
+Exclude:
+
+```text
+venv/
+.git/
+.agents/
+__pycache__/
+*.pyc
+db.sqlite3
+runserver.out
+runserver.err
+*.zip
+dist/
+build/
+*.spec
+```
+
+After receiving the ZIP on another PC, create a fresh virtual environment and install dependencies again.
+
+## Tests
+
+```powershell
+.\venv\Scripts\python.exe manage.py test drivefiles
+.\venv\Scripts\python.exe manage.py check
+```
+
+## Requirements
+
+```text
+Django==6.0.7
+asgiref==3.12.1
+sqlparse==0.5.5
+tzdata==2026.3
+```

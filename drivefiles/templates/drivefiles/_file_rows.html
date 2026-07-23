@@ -1,0 +1,57 @@
+{% for file in files %}
+
+    <tr>
+        <td>
+            <div class="file-link">
+                <span class="file-icon {{ file.type_class|default:'other' }}">
+                    {{ file.type_badge|default:"FILE" }}
+                </span>
+                <span class="file-name">{{ file.name }}</span>
+            </div>
+        </td>
+
+        <td>
+            <span class="file-folder" title="{{ file.folder }}">
+                {{ file.folder }}
+            </span>
+        </td>
+
+        <td>
+            <span class="type-value">{{ file.type_label|default:file.extension }}</span>
+        </td>
+
+        <td>
+            <span class="size-value">{{ file.size }}</span>
+        </td>
+
+        <td>
+            {% if file.downloadable is False %}
+                <span class="download-action disabled" title="Remote metadata only">
+                    Remote
+                </span>
+            {% else %}
+                <a
+                    href="{% url 'download_file' %}?path={{ file.relative_path|urlencode }}"
+                    class="download-action"
+                    title="Download {{ file.name }}"
+                >
+                    <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 3v12"></path>
+                        <path d="m7 10 5 5 5-5"></path>
+                        <path d="M5 21h14"></path>
+                    </svg>
+                    Download
+                </a>
+            {% endif %}
+        </td>
+    </tr>
+
+{% empty %}
+
+    <tr>
+        <td colspan="5" class="empty-state">
+            No files were found.
+        </td>
+    </tr>
+
+{% endfor %}
