@@ -13,6 +13,7 @@ Agent/
 |-- README.md
 |-- Procfile
 |-- build.sh
+|-- start.sh
 |-- build_drive_agent.ps1
 |-- render.yaml
 |-- runtime.txt
@@ -243,7 +244,7 @@ The Blueprint uses:
 
 ```text
 Build Command: bash build.sh
-Start Command: python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+Start Command: bash start.sh
 Health Check Path: /agent-ping/
 Python Version: 3.12.13
 ```
@@ -264,7 +265,7 @@ bash build.sh
 5. Set Start Command:
 
 ```bash
-python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+bash start.sh
 ```
 
 6. Set Health Check Path:
