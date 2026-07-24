@@ -286,13 +286,25 @@ def _active_agent_cutoff():
     )
 
 
-def _build_active_agents():
+def _build_active_agents(selected_agent_id=""):
     online_cutoff = _active_agent_cutoff()
-    agents = (
-        ActiveAgent.objects.filter(last_seen_at__gte=online_cutoff)
+    online_agents = ActiveAgent.objects.filter(last_seen_at__gte=online_cutoff)
+    agents = list(
+        online_agents
         .prefetch_related("drive_reports")
         .order_by("-last_seen_at")[:24]
     )
+
+    if selected_agent_id and selected_agent_id not in {agent.agent_id for agent in agents}:
+        selected_agent = (
+            online_agents.filter(agent_id=selected_agent_id)
+            .prefetch_related("drive_reports")
+            .first()
+        )
+
+        if selected_agent:
+            agents.append(selected_agent)
+
     active_agents = []
 
     for agent in agents:
@@ -326,7 +338,9 @@ def _build_active_agents():
 
 
 def _active_agents_json_payload(selected_agent_id=""):
-    active_agents = _build_active_agents()
+    active_agents = _build_active_agents(selected_agent_id)
+    active_agent_ids = {agent["agent_id"] for agent in active_agents}
+    selected_agent_id = selected_agent_id if selected_agent_id in active_agent_ids else ""
 
     return {
         "agents": active_agents,
@@ -395,6 +409,11 @@ def _get_selected_agent(request):
         request.session.pop(SELECTED_AGENT_DRIVE_SESSION_KEY, None)
         request.session.modified = True
         return None
+
+
+def _validated_selected_agent_id(request):
+    selected_agent = _get_selected_agent(request)
+    return selected_agent.agent_id if selected_agent else ""
 
 
 def _set_selected_agent(request, agent_id):
@@ -1267,7 +1286,7 @@ def drive_files_data(request):
 
 @login_required
 def active_agents_data(request):
-    return JsonResponse(_active_agents_json_payload(_get_selected_agent_id(request)))
+    return JsonResponse(_active_agents_json_payload(_validated_selected_agent_id(request)))
 
 
 def agent_ping(request):
@@ -1608,13 +1627,18 @@ def select_agent(request):
     requested_agent_id = _safe_text(request.POST.get("agent_id"), 128).strip()
 
     if requested_agent_id:
-        selected_agent = ActiveAgent.objects.filter(agent_id=requested_agent_id).first()
+        selected_agent = ActiveAgent.objects.filter(
+            agent_id=requested_agent_id,
+            last_seen_at__gte=_active_agent_cutoff(),
+        ).first()
 
         if not selected_agent:
+            _set_selected_agent(request, "")
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": "Selected DriveAgent user was not found.",
+                    "error": "Selected DriveAgent user is not active.",
+                    "selected_agent_id": "",
                 },
                 status=404,
             )

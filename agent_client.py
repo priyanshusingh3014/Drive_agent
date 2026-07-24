@@ -24,8 +24,6 @@ HEARTBEAT_SECONDS_ENV = "DRIVE_AGENT_HEARTBEAT_SECONDS"
 COUNT_REFRESH_SECONDS_ENV = "DRIVE_AGENT_COUNT_REFRESH_SECONDS"
 FILE_BATCH_SIZE_ENV = "DRIVE_AGENT_FILE_BATCH_SIZE"
 CHANGE_DEBOUNCE_SECONDS_ENV = "DRIVE_AGENT_CHANGE_DEBOUNCE_SECONDS"
-DEFAULT_SERVER_URL = "http://192.168.1.7:8000/agent-heartbeat/"
-DEFAULT_API_TOKEN = "drive-agent-local-token"
 DEFAULT_HEARTBEAT_SECONDS = 30
 DEFAULT_COUNT_REFRESH_SECONDS = 300
 DEFAULT_FILE_BATCH_SIZE = 500
@@ -47,6 +45,18 @@ SPREADSHEET_EXTENSIONS = frozenset({".xls", ".xlsx", ".csv", ".tsv", ".ods"})
 IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".heic"})
 VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", ".flv"})
 ARCHIVE_EXTENSIONS = frozenset({".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"})
+
+try:
+    from agent_build_defaults import (
+        DEFAULT_API_TOKEN as BUILD_DEFAULT_API_TOKEN,
+        DEFAULT_SERVER_URL as BUILD_DEFAULT_SERVER_URL,
+    )
+except ImportError:
+    BUILD_DEFAULT_SERVER_URL = "http://192.168.1.7:8000/agent-heartbeat/"
+    BUILD_DEFAULT_API_TOKEN = "drive-agent-local-token"
+
+DEFAULT_SERVER_URL = BUILD_DEFAULT_SERVER_URL
+DEFAULT_API_TOKEN = BUILD_DEFAULT_API_TOKEN
 
 
 def _runtime_directory():

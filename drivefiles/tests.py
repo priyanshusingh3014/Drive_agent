@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from .models import ActiveAgent, ActiveAgentDrive, ActiveAgentFile
 from . import scanner
+from .views import SELECTED_AGENT_SESSION_KEY
 
 
 class ScannerTests(SimpleTestCase):
@@ -214,6 +215,95 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["total_agents"], 0)
         self.assertEqual(data["online_agents"], 0)
         self.assertEqual(data["agents"], [])
+
+    def test_agent_heartbeat_does_not_auto_select_remote_user(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+
+        self.client.force_login(user)
+        response = self.client.post(
+            "/agent-heartbeat/",
+            data={
+                "agent_id": "new-pc",
+                "host_name": "NEW-PC",
+                "drives": [
+                    {
+                        "label": "C:\\",
+                        "value": "C:/",
+                        "total_files": 7,
+                    }
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        active_response = self.client.get("/active-agents-data/")
+        active_data = active_response.json()
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(active_data["total_agents"], 1)
+        self.assertEqual(active_data["agents"][0]["host_name"], "NEW-PC")
+        self.assertEqual(active_data["selected_agent_id"], "")
+
+    def test_selected_stale_agent_is_cleared_from_active_users_payload(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        ActiveAgent.objects.create(
+            agent_id="stale-selected-pc",
+            host_name="STALE-PC",
+            ip_address="192.168.1.99",
+        )
+        ActiveAgent.objects.filter(agent_id="stale-selected-pc").update(
+            last_seen_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        self.client.force_login(user)
+        session = self.client.session
+        session[SELECTED_AGENT_SESSION_KEY] = "stale-selected-pc"
+        session.save()
+
+        response = self.client.get("/active-agents-data/")
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "")
+        self.assertNotIn(SELECTED_AGENT_SESSION_KEY, self.client.session)
+
+    def test_select_agent_rejects_stale_agent_and_clears_selection(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        ActiveAgent.objects.create(
+            agent_id="old-select-pc",
+            host_name="OLD-SELECT-PC",
+            ip_address="192.168.1.33",
+        )
+        ActiveAgent.objects.filter(agent_id="old-select-pc").update(
+            last_seen_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        self.client.force_login(user)
+        session = self.client.session
+        session[SELECTED_AGENT_SESSION_KEY] = "old-select-pc"
+        session.save()
+
+        response = self.client.post(
+            "/select-agent/",
+            data={"agent_id": "old-select-pc"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(data["selected_agent_id"], "")
+        self.assertNotIn(SELECTED_AGENT_SESSION_KEY, self.client.session)
 
     def test_agent_files_batch_stores_remote_files(self):
         response = self.client.post(

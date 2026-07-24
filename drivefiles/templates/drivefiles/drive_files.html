@@ -877,9 +877,16 @@
             }
 
             const agents = Array.isArray(data.agents) ? data.agents : data.active_agents || [];
+            const previousSelectedAgentId = selectedAgentId;
 
             if (Object.prototype.hasOwnProperty.call(data, "selected_agent_id")) {
                 selectedAgentId = data.selected_agent_id || "";
+            }
+
+            if (previousSelectedAgentId && !selectedAgentId) {
+                window.setTimeout(function () {
+                    selectAgent("");
+                }, 0);
             }
 
             if (activeAgentsTotalElement) {
@@ -988,6 +995,7 @@
             resetIdleLogoutTimer();
             closeMenus();
             clearSearchInputs();
+            const previousSelectedAgentId = selectedAgentId;
             activeFilter = "all";
             currentPage = 1;
             lastRenderedVersion = null;
@@ -1015,11 +1023,14 @@
                 });
 
                 if (!response.ok) {
+                    selectedAgentId = previousSelectedAgentId;
+                    refreshActiveAgents();
                     return;
                 }
 
                 applyFilesPayload(await response.json(), "");
             } catch (error) {
+                selectedAgentId = previousSelectedAgentId;
                 console.error("Unable to select DriveAgent user.", error);
             }
         }

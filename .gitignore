@@ -10,6 +10,8 @@ runserver.out
 runserver.err
 *.log
 *.zip
+agent_build_defaults.py
+agent_download/
 build/
 dist/
 *.spec

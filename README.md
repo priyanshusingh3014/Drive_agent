@@ -13,11 +13,13 @@ Agent/
 |-- README.md
 |-- Procfile
 |-- build.sh
+|-- build_drive_agent.ps1
 |-- render.yaml
 |-- runtime.txt
 |-- .python-version
 |-- agent_client.py
 |-- agent_config.example.json
+|-- agent_build_defaults.example.py
 |-- config/
 |   |-- settings.py
 |   |-- urls.py
@@ -322,7 +324,7 @@ python agent_client.py
 
 After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uploads file metadata in batches. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
 
-## Convert User Agent To EXE
+## Build User Agent EXE
 
 Install PyInstaller:
 
@@ -330,11 +332,21 @@ Install PyInstaller:
 .\venv\Scripts\python.exe -m pip install pyinstaller
 ```
 
-Build the one-file user executable:
+After the dashboard is deployed, build the one-file user executable with the public dashboard URL and the same `DRIVE_AGENT_API_TOKEN` configured on Render:
 
 ```powershell
-.\venv\Scripts\pyinstaller.exe --onefile --noconsole --name DriveAgent agent_client.py
+.\build_drive_agent.ps1 `
+    -ServerUrl "https://your-render-service.onrender.com/agent-heartbeat/" `
+    -ApiToken "paste-the-same-token-used-in-render"
 ```
+
+The script creates this file:
+
+```text
+agent_download/DriveAgent.exe
+```
+
+It also creates `agent_build_defaults.py` locally so the one-file EXE has your Render endpoint and token built in. That file is ignored by Git and must not be pushed to GitHub.
 
 Copy only this file to the user PC:
 
