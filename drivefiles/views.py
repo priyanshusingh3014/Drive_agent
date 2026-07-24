@@ -353,16 +353,15 @@ def _active_agent_cutoff():
 
 def _build_active_agents(selected_agent_id=""):
     online_cutoff = _active_agent_cutoff()
-    online_agents = ActiveAgent.objects.filter(last_seen_at__gte=online_cutoff)
     agents = list(
-        online_agents
+        ActiveAgent.objects
         .prefetch_related("drive_reports")
-        .order_by("-last_seen_at")[:24]
+        .order_by("-last_seen_at", "host_name")[:24]
     )
 
     if selected_agent_id and selected_agent_id not in {agent.agent_id for agent in agents}:
         selected_agent = (
-            online_agents.filter(agent_id=selected_agent_id)
+            ActiveAgent.objects.filter(agent_id=selected_agent_id)
             .prefetch_related("drive_reports")
             .first()
         )
@@ -373,6 +372,7 @@ def _build_active_agents(selected_agent_id=""):
     active_agents = []
 
     for agent in agents:
+        is_online = agent.last_seen_at >= online_cutoff
         payload = agent.latest_payload if isinstance(agent.latest_payload, dict) else {}
         drive_reports = _ordered_agent_drive_reports(agent.drive_reports.all())
         drives = (
@@ -393,8 +393,8 @@ def _build_active_agents(selected_agent_id=""):
                 "total_files": agent.total_files,
                 "total_files_display": _format_number(agent.total_files),
                 "last_seen_display": _format_relative_time(agent.last_seen_at),
-                "is_online": True,
-                "status_label": "Online",
+                "is_online": is_online,
+                "status_label": "Online" if is_online else "Offline",
                 "drives": drives,
             }
         )
@@ -467,8 +467,7 @@ def _auto_selected_hosted_agent():
         return None
 
     online_agents = list(
-        ActiveAgent.objects.filter(last_seen_at__gte=_active_agent_cutoff())
-        .order_by("-last_seen_at")[:2]
+        ActiveAgent.objects.order_by("-last_seen_at")[:2]
     )
 
     if len(online_agents) == 1:
@@ -494,10 +493,7 @@ def _get_selected_agent(request):
         return None
 
     try:
-        return ActiveAgent.objects.get(
-            agent_id=agent_id,
-            last_seen_at__gte=_active_agent_cutoff(),
-        )
+        return ActiveAgent.objects.get(agent_id=agent_id)
     except ActiveAgent.DoesNotExist:
         request.session.pop(SELECTED_AGENT_SESSION_KEY, None)
         request.session.pop(SELECTED_AGENT_DRIVE_SESSION_KEY, None)
@@ -506,8 +502,18 @@ def _get_selected_agent(request):
 
 
 def _validated_selected_agent_id(request):
-    selected_agent = _get_selected_agent(request)
-    return selected_agent.agent_id if selected_agent else ""
+    agent_id = _get_selected_agent_id(request)
+
+    if not agent_id:
+        return ""
+
+    if ActiveAgent.objects.filter(agent_id=agent_id).exists():
+        return agent_id
+
+    request.session.pop(SELECTED_AGENT_SESSION_KEY, None)
+    request.session.pop(SELECTED_AGENT_DRIVE_SESSION_KEY, None)
+    request.session.modified = True
+    return ""
 
 
 def _set_selected_agent(request, agent_id):
@@ -2010,7 +2016,6 @@ def select_agent(request):
     if requested_agent_id:
         selected_agent = ActiveAgent.objects.filter(
             agent_id=requested_agent_id,
-            last_seen_at__gte=_active_agent_cutoff(),
         ).first()
 
         if not selected_agent:

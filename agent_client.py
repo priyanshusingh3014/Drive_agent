@@ -1608,6 +1608,9 @@ def main():
 
         return
 
+    if args.run_agent:
+        stop_other_agent_processes()
+
     heartbeat_seconds = _positive_int(
         args.heartbeat_seconds
         or _config_value(

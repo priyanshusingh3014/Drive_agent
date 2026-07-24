@@ -46,7 +46,7 @@
                         </svg>
                     </span>
                     <span class="nav-text">Active Users</span>
-                    <span class="sidebar-user-count" data-active-agents-online>{{ active_agents_online }}</span>
+                    <span class="sidebar-user-count" data-active-agents-online>{{ active_agents_total }}</span>
                 </div>
 
                 <div class="sidebar-user-list" data-active-agents-list>
@@ -831,7 +831,7 @@
             }
 
             if (activeAgentsOnlineElement) {
-                activeAgentsOnlineElement.textContent = data.online_agents ?? data.active_agents_online ?? 0;
+                activeAgentsOnlineElement.textContent = data.total_agents ?? data.active_agents_total ?? agents.length;
             }
 
             if (!agents.length) {
@@ -853,11 +853,12 @@
 
             activeAgentsListElement.innerHTML = agents.map(function (agent) {
                 const subtitle = `${agent.drive_count || 0} drives | ${agent.total_files_display || "0"} files`;
+                const onlineClass = agent.is_online === false ? " offline" : "";
 
                 return `
                     <button
                         type="button"
-                        class="sidebar-user-button${agent.agent_id === selectedAgentId ? " selected" : ""}"
+                        class="sidebar-user-button${agent.agent_id === selectedAgentId ? " selected" : ""}${onlineClass}"
                         data-agent-id="${escapeHtml(agent.agent_id || "")}"
                         title="${escapeHtml(agent.ip_address || "Unavailable")} | ${escapeHtml(agent.mac_address || "Unavailable")}"
                     >

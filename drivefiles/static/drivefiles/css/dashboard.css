@@ -269,6 +269,11 @@
             box-shadow: 0 0 0 3px rgba(25, 197, 111, 0.13);
         }
 
+        .sidebar-user-button.offline .sidebar-user-dot {
+            background: #94a3b8;
+            box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+        }
+
         .sidebar-user-name,
         .sidebar-user-meta {
             display: block;

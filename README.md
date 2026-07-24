@@ -285,7 +285,7 @@ DJANGO_SECURE_SSL_REDIRECT=True
 DJANGO_SECURE_HSTS_SECONDS=31536000
 DRIVE_AGENT_API_TOKEN=<same-secret-token-used-by-the-exe>
 DRIVE_AGENT_ENABLE_LOCAL_SCANNER=False
-DRIVE_AGENT_ONLINE_SECONDS=3
+DRIVE_AGENT_ONLINE_SECONDS=90
 DRIVE_AGENT_DEFAULT_DRIVE=D:/
 DRIVE_AGENT_DRIVE_PRIORITY=D,C
 DRIVE_AGENT_FILE_BATCH_SIZE=250
@@ -461,7 +461,7 @@ $env:DRIVE_AGENT_ROOT = "E:/"
 - Reported PC default drive follows the configured drive priority.
 - Select a reported drive for the selected Active User and the file table, storage card, file type distribution, totals, and host/IP/MAC area update to that PC.
 - User agents send heartbeats every 1 second by default, watch Windows drive changes, and report changed drive data after additions, edits, and deletions.
-- Agents are treated as offline after 3 seconds without a heartbeat, so Active Users updates quickly without flickering on one delayed heartbeat.
+- Agents remain listed under Active Users until uninstall removes them. They are marked offline after the configured heartbeat window, defaulting to 90 seconds.
 - User agents scan drives in the configured priority order, and selected remote drives are requested through heartbeat so the first batch appears quickly while the remaining drive data streams.
 - Uninstalling the DriveAgent user package removes that PC from Active Users.
 - Agent heartbeat API protected by a shared token.

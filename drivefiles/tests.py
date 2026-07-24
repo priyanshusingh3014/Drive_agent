@@ -208,7 +208,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["agents"][0]["host_name"], "OFFICE-PC")
         self.assertEqual(data["agents"][0]["drives"][0]["total_files_display"], "5")
 
-    def test_active_agents_data_hides_stale_agents(self):
+    def test_active_agents_data_keeps_delayed_agents_visible(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -227,11 +227,12 @@ class ActiveAgentHeartbeatTests(TestCase):
         data = response.json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["total_agents"], 0)
+        self.assertEqual(data["total_agents"], 1)
         self.assertEqual(data["online_agents"], 0)
-        self.assertEqual(data["agents"], [])
+        self.assertEqual(data["agents"][0]["host_name"], "OLD-PC")
+        self.assertFalse(data["agents"][0]["is_online"])
 
-    def test_agent_heartbeat_does_not_auto_select_remote_user(self):
+    def test_agent_heartbeat_does_not_select_remote_user_in_sidebar_feed(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -264,7 +265,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(active_data["agents"][0]["host_name"], "NEW-PC")
         self.assertEqual(active_data["selected_agent_id"], "")
 
-    def test_selected_stale_agent_is_cleared_from_active_users_payload(self):
+    def test_selected_delayed_agent_stays_selected_in_active_users_payload(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -279,18 +280,22 @@ class ActiveAgentHeartbeatTests(TestCase):
         )
 
         self.client.force_login(user)
-        session = self.client.session
-        session[SELECTED_AGENT_SESSION_KEY] = "stale-selected-pc"
-        session.save()
+        select_response = self.client.post(
+            "/select-agent/",
+            data={"agent_id": "stale-selected-pc"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(select_response.status_code, 200)
 
         response = self.client.get("/active-agents-data/")
         data = response.json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["selected_agent_id"], "")
-        self.assertNotIn(SELECTED_AGENT_SESSION_KEY, self.client.session)
+        self.assertEqual(data["selected_agent_id"], "stale-selected-pc")
+        self.assertEqual(data["total_agents"], 1)
+        self.assertFalse(data["agents"][0]["is_online"])
 
-    def test_select_agent_rejects_stale_agent_and_clears_selection(self):
+    def test_select_agent_allows_delayed_agent(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -316,9 +321,9 @@ class ActiveAgentHeartbeatTests(TestCase):
         )
         data = response.json()
 
-        self.assertEqual(response.status_code, 404)
-        self.assertEqual(data["selected_agent_id"], "")
-        self.assertNotIn(SELECTED_AGENT_SESSION_KEY, self.client.session)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "old-select-pc")
+        self.assertEqual(data["dashboard"]["system_info"]["host_name"], "OLD-SELECT-PC")
 
     @override_settings(LOCAL_DRIVE_SCANNER_ENABLED=False)
     def test_hosted_dashboard_waits_for_active_user_when_no_agent_selected(self):
