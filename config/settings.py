@@ -46,6 +46,10 @@ SECRET_KEY = os.environ.get(
 )
 
 RUNNING_ON_RENDER = bool(os.environ.get("RENDER"))
+LOCAL_DRIVE_SCANNER_ENABLED = _env_bool(
+    "DRIVE_AGENT_ENABLE_LOCAL_SCANNER",
+    default=not RUNNING_ON_RENDER,
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = _env_bool("DJANGO_DEBUG", default=not RUNNING_ON_RENDER)
@@ -214,8 +218,18 @@ LOGOUT_REDIRECT_URL = "login"
 SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 SESSION_COOKIE_NAME = f"file_agent_session_{secrets.token_hex(8)}"
 AGENT_API_TOKEN = os.environ.get("DRIVE_AGENT_API_TOKEN", "drive-agent-local-token")
-AGENT_ONLINE_SECONDS = int(os.environ.get("DRIVE_AGENT_ONLINE_SECONDS", "120"))
-AGENT_FILE_BATCH_SIZE = int(os.environ.get("DRIVE_AGENT_FILE_BATCH_SIZE", "500"))
+AGENT_ONLINE_SECONDS = int(os.environ.get("DRIVE_AGENT_ONLINE_SECONDS", "3"))
+AGENT_FILE_BATCH_SIZE = int(os.environ.get("DRIVE_AGENT_FILE_BATCH_SIZE", "250"))
+AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT = _env_bool(
+    "DRIVE_AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT",
+    default=True,
+)
+AGENT_FILE_DOWNLOAD_WAIT_SECONDS = int(
+    os.environ.get("DRIVE_AGENT_FILE_DOWNLOAD_WAIT_SECONDS", "20")
+)
+REMOTE_FILE_DOWNLOAD_ROOT = Path(
+    os.environ.get("DRIVE_AGENT_REMOTE_DOWNLOAD_ROOT", BASE_DIR / "remote_downloads")
+)
 DATA_UPLOAD_MAX_MEMORY_SIZE = int(
     os.environ.get("DRIVE_AGENT_MAX_UPLOAD_BYTES", str(50 * 1024 * 1024))
 )

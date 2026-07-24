@@ -10,6 +10,7 @@ urlpatterns = [
     path("agent-ping/", views.agent_ping, name="agent_ping"),
     path("agent-heartbeat/", views.agent_heartbeat, name="agent_heartbeat"),
     path("agent-files-batch/", views.agent_files_batch, name="agent_files_batch"),
+    path("agent-file-download/", views.agent_file_download, name="agent_file_download"),
     path("agent-uninstall/", views.agent_uninstall, name="agent_uninstall"),
     path("select-agent/", views.select_agent, name="select_agent"),
     path("select-drive/", views.select_drive, name="select_drive"),

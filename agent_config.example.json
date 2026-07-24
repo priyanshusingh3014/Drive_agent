@@ -1,8 +1,13 @@
 {
-  "server_url": "http://ADMIN-PC-IP:8000/agent-heartbeat/",
+  "server_url": "https://your-render-service.onrender.com/agent-heartbeat/",
   "api_token": "drive-agent-local-token",
-  "heartbeat_seconds": 30,
-  "count_refresh_seconds": 300,
-  "file_batch_size": 500,
-  "change_debounce_seconds": 3
+  "heartbeat_seconds": 1,
+  "count_refresh_seconds": 60,
+  "file_batch_size": 250,
+  "first_file_batch_size": 10,
+  "file_batch_interval_seconds": 1,
+  "change_debounce_seconds": 1,
+  "lan_discovery_enabled": false,
+  "drive_priority": "D,C",
+  "priority_folders": "Users,Desktop,Documents,Downloads,OneDrive,Pictures"
 }

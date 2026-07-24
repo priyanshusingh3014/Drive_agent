@@ -4,7 +4,10 @@ from pathlib import Path
 
 
 DRIVE_AGENT_ROOT_ENV = "DRIVE_AGENT_ROOT"
-DEFAULT_DRIVE_ROOT = "D:/"
+DEFAULT_DRIVE_ROOT_ENV = "DRIVE_AGENT_DEFAULT_DRIVE"
+DRIVE_PRIORITY_ENV = "DRIVE_AGENT_DRIVE_PRIORITY"
+DEFAULT_DRIVE_ROOT = os.environ.get(DEFAULT_DRIVE_ROOT_ENV, "D:/").strip() or "D:/"
+DEFAULT_DRIVE_PRIORITY = os.environ.get(DRIVE_PRIORITY_ENV, "D,C").strip() or "D,C"
 
 
 def _fallback_drive_root():
@@ -27,6 +30,53 @@ def _discover_drive_roots():
         )
 
     return (Path("/"),)
+
+
+def _drive_letter(value):
+    value = str(value).replace("\\", "/").strip().upper()
+
+    if len(value) >= 2 and value[1] == ":":
+        return value[0]
+
+    if len(value) == 1 and value in string.ascii_uppercase:
+        return value
+
+    return ""
+
+
+def get_preferred_drive_letters():
+    letters = []
+    seen_letters = set()
+
+    for raw_part in DEFAULT_DRIVE_PRIORITY.replace(";", ",").split(","):
+        letter = _drive_letter(raw_part)
+
+        if letter and letter not in seen_letters:
+            seen_letters.add(letter)
+            letters.append(letter)
+
+    default_letter = _drive_letter(DEFAULT_DRIVE_ROOT)
+
+    if default_letter and default_letter not in seen_letters:
+        letters.insert(0, default_letter)
+
+    return tuple(letters)
+
+
+def drive_sort_key_for_value(value):
+    letter = _drive_letter(value)
+    preferred_letters = get_preferred_drive_letters()
+    preferred_index = (
+        preferred_letters.index(letter)
+        if letter in preferred_letters
+        else len(preferred_letters)
+    )
+
+    return (preferred_index, str(value).lower())
+
+
+def _drive_sort_key(path):
+    return drive_sort_key_for_value(path)
 
 
 def normalize_drive_root(root):
@@ -129,7 +179,7 @@ def get_available_drive_roots():
     if not drive_roots:
         drive_roots = [configured_root]
 
-    return tuple(sorted(drive_roots, key=lambda path: str(path).lower()))
+    return tuple(sorted(drive_roots, key=_drive_sort_key))
 
 
 def get_drive_options(selected_root):

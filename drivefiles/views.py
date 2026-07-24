@@ -9,6 +9,7 @@ import time
 import uuid
 from collections import Counter
 from datetime import timedelta
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -24,13 +25,14 @@ from django.views.decorators.http import require_POST
 from .drive_config import (
     DRIVE_ROOT,
     build_drive_context,
+    drive_sort_key_for_value,
     drive_root_to_value,
     get_available_drive_roots,
     get_drive_options,
     normalize_drive_root,
 )
 from .forms import AgentSignupForm
-from .models import ActiveAgent, ActiveAgentDrive, ActiveAgentFile
+from .models import ActiveAgent, ActiveAgentDrive, ActiveAgentFile, RemoteFileDownload
 from .scanner import (
     format_size,
     get_file_snapshot,
@@ -42,7 +44,7 @@ from .scanner import (
 
 
 FRONTEND_REFRESH_SECONDS = 1
-ACTIVE_AGENTS_REFRESH_SECONDS = 5
+ACTIVE_AGENTS_REFRESH_SECONDS = 1
 TABLE_PAGE_SIZE = 10
 SELECTED_DRIVE_SESSION_KEY = "drivefiles_selected_drive_root"
 SELECTED_AGENT_SESSION_KEY = "drivefiles_selected_agent_id"
@@ -208,6 +210,69 @@ def _normalize_agent_drives(raw_drives):
     return normalized_drives
 
 
+def _normalize_requested_drive_values(raw_values, available_values=()):
+    if isinstance(raw_values, str):
+        raw_drive_values = raw_values.replace(";", ",").split(",")
+    elif isinstance(raw_values, (list, tuple, set)):
+        raw_drive_values = raw_values
+    else:
+        raw_drive_values = []
+
+    available_value_set = set(available_values)
+    normalized_values = []
+
+    for raw_value in raw_drive_values:
+        drive_value = _safe_text(raw_value, 64).strip()
+
+        if not drive_value:
+            continue
+
+        if available_value_set and drive_value not in available_value_set:
+            continue
+
+        if drive_value not in normalized_values:
+            normalized_values.append(drive_value)
+
+    return normalized_values[:8]
+
+
+def _normalize_requested_file_downloads(raw_values, available_values=()):
+    if not isinstance(raw_values, list):
+        return []
+
+    available_value_set = set(available_values)
+    normalized_requests = []
+    seen_request_ids = set()
+
+    for raw_request in raw_values[:16]:
+        if not isinstance(raw_request, dict):
+            continue
+
+        request_id = _safe_text(raw_request.get("request_id"), 64).strip()
+        drive_value = _safe_text(raw_request.get("drive_value"), 64).strip()
+        relative_path = _safe_text(raw_request.get("relative_path"), 2048).strip()
+
+        if not request_id or not drive_value or not relative_path:
+            continue
+
+        if available_value_set and drive_value not in available_value_set:
+            continue
+
+        if request_id in seen_request_ids:
+            continue
+
+        seen_request_ids.add(request_id)
+        normalized_requests.append(
+            {
+                "request_id": request_id,
+                "drive_value": drive_value,
+                "relative_path": relative_path,
+            }
+        )
+
+    return normalized_requests[:8]
+
+
 def _normalize_agent_file(raw_file):
     if not isinstance(raw_file, dict):
         return None
@@ -309,7 +374,7 @@ def _build_active_agents(selected_agent_id=""):
 
     for agent in agents:
         payload = agent.latest_payload if isinstance(agent.latest_payload, dict) else {}
-        drive_reports = list(agent.drive_reports.all())
+        drive_reports = _ordered_agent_drive_reports(agent.drive_reports.all())
         drives = (
             [_drive_report_payload(drive_report) for drive_report in drive_reports]
             if drive_reports
@@ -393,10 +458,39 @@ def _get_selected_agent_id(request):
     return str(request.session.get(SELECTED_AGENT_SESSION_KEY) or "")
 
 
+def _auto_selected_hosted_agent():
+    if _local_drive_scanner_enabled() or not getattr(
+        settings,
+        "AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT",
+        True,
+    ):
+        return None
+
+    online_agents = list(
+        ActiveAgent.objects.filter(last_seen_at__gte=_active_agent_cutoff())
+        .order_by("-last_seen_at")[:2]
+    )
+
+    if len(online_agents) == 1:
+        return online_agents[0]
+
+    return None
+
+
 def _get_selected_agent(request):
     agent_id = _get_selected_agent_id(request)
 
     if not agent_id:
+        hosted_agent = _auto_selected_hosted_agent()
+
+        if hosted_agent:
+            _set_selected_agent(request, hosted_agent.agent_id)
+            _queue_agent_drive_scan(
+                hosted_agent,
+                _get_selected_agent_drive_value(request, hosted_agent),
+            )
+            return hosted_agent
+
         return None
 
     try:
@@ -428,19 +522,32 @@ def _set_selected_agent(request, agent_id):
 
 def _get_selected_agent_drive_value(request, agent):
     selected_value = str(request.session.get(SELECTED_AGENT_DRIVE_SESSION_KEY) or "")
-    available_values = set(agent.drive_reports.values_list("value", flat=True))
+    drive_reports = _ordered_agent_drive_reports(agent.drive_reports.all())
+    available_values = {drive_report.value for drive_report in drive_reports}
 
     if selected_value in available_values:
         return selected_value
 
-    first_drive = agent.drive_reports.order_by("label").first()
+    preferred_drive = _preferred_agent_drive_report(drive_reports)
 
-    if not first_drive:
+    if not preferred_drive:
         return ""
 
-    request.session[SELECTED_AGENT_DRIVE_SESSION_KEY] = first_drive.value
+    request.session[SELECTED_AGENT_DRIVE_SESSION_KEY] = preferred_drive.value
     request.session.modified = True
-    return first_drive.value
+    return preferred_drive.value
+
+
+def _agent_drive_sort_key(drive_report):
+    return drive_sort_key_for_value(drive_report.value or drive_report.label)
+
+
+def _ordered_agent_drive_reports(drive_reports):
+    return sorted(list(drive_reports), key=_agent_drive_sort_key)
+
+
+def _preferred_agent_drive_report(drive_reports):
+    return drive_reports[0] if drive_reports else None
 
 
 def _set_selected_agent_drive_value(request, agent, value):
@@ -452,6 +559,77 @@ def _set_selected_agent_drive_value(request, agent, value):
         return drive_value
 
     return _get_selected_agent_drive_value(request, agent)
+
+
+def _queue_agent_drive_scan(agent, drive_value):
+    requested_drive_value = _safe_text(drive_value, 64).strip()
+
+    if not requested_drive_value:
+        return
+
+    latest_payload = agent.latest_payload if isinstance(agent.latest_payload, dict) else {}
+    latest_payload["requested_drive_values"] = [requested_drive_value]
+    agent.latest_payload = latest_payload
+    agent.save(update_fields=("latest_payload",))
+
+
+def _queue_agent_file_download(agent, drive, file_report):
+    download_request = RemoteFileDownload.objects.create(
+        request_id=uuid.uuid4().hex,
+        agent=agent,
+        drive=drive,
+        relative_path=file_report.relative_path,
+        name=file_report.name,
+        modified_timestamp=file_report.modified_timestamp,
+    )
+    latest_payload = agent.latest_payload if isinstance(agent.latest_payload, dict) else {}
+    queued_downloads = _normalize_requested_file_downloads(
+        latest_payload.get("requested_file_downloads"),
+        [drive.value],
+    )
+    queued_downloads.append(
+        {
+            "request_id": download_request.request_id,
+            "drive_value": drive.value,
+            "relative_path": file_report.relative_path,
+        }
+    )
+    latest_payload["requested_file_downloads"] = queued_downloads[-8:]
+    agent.latest_payload = latest_payload
+    agent.save(update_fields=("latest_payload",))
+    return download_request
+
+
+def _remote_download_storage_path(download_request):
+    download_root = Path(settings.REMOTE_FILE_DOWNLOAD_ROOT)
+    return download_root / f"{download_request.request_id}.download"
+
+
+def _ready_remote_download_for_file(agent, drive, file_report):
+    return (
+        RemoteFileDownload.objects.filter(
+            agent=agent,
+            drive=drive,
+            relative_path=file_report.relative_path,
+            modified_timestamp=file_report.modified_timestamp,
+            status=RemoteFileDownload.STATUS_READY,
+        )
+        .order_by("-updated_at")
+        .first()
+    )
+
+
+def _remote_download_file_response(download_request):
+    download_path = Path(download_request.file_path)
+
+    if not download_path.exists() or not download_path.is_file():
+        return None
+
+    return FileResponse(
+        open(download_path, "rb"),
+        as_attachment=True,
+        filename=download_request.name,
+    )
 
 
 def _safe_redirect_target(request):
@@ -825,7 +1003,7 @@ def _remote_file_to_dict(file_report):
         "modified_timestamp": file_report.modified_timestamp,
         "freshness_timestamp": file_report.freshness_timestamp,
         "modified_display": file_report.modified_display,
-        "downloadable": False,
+        "downloadable": True,
         "remote_file": True,
     }
 
@@ -844,7 +1022,7 @@ def _remote_file_matches_search(file_information, search_query):
 
 
 def _agent_drive_options(agent, selected_drive_value):
-    drive_reports = agent.drive_reports.order_by("label")
+    drive_reports = _ordered_agent_drive_reports(agent.drive_reports.all())
     options = [
         {
             "label": drive_report.label,
@@ -1037,6 +1215,10 @@ def _drive_files_json_response(context, request=None, extra_payload=None):
     return JsonResponse(payload)
 
 
+def _local_drive_scanner_enabled():
+    return bool(getattr(settings, "LOCAL_DRIVE_SCANNER_ENABLED", True))
+
+
 def _build_pagination_context(total_items, page_number):
     total_pages = max(1, math.ceil(total_items / TABLE_PAGE_SIZE))
     page_number = min(max(page_number, 1), total_pages)
@@ -1074,6 +1256,73 @@ def _filter_files(files, filter_type):
         for file_information in files
         if _matches_file_type_filter(file_information, filter_type)
     ], filter_type
+
+
+def _build_hosted_waiting_context(request, selected_drive_root):
+    search_query = request.GET.get("search", "").strip()
+    filter_type = request.GET.get("type", "all").strip().lower()
+    page_number = _parse_positive_int(request.GET.get("page"), default=1)
+    _empty_files, filter_type = _filter_files([], filter_type)
+    pagination = _build_pagination_context(0, page_number)
+    type_distribution = _build_file_type_distribution(
+        [],
+        cache_key=("hosted-waiting",),
+    )
+    active_agents_payload = _active_agents_json_payload("")
+
+    return {
+        **drive_context(selected_drive_root),
+        **_format_datetime_parts(None),
+        **pagination,
+        "data_source": "hosted",
+        "selected_agent_id": "",
+        "selected_agent_host": "",
+        "files": [],
+        "all_files": [],
+        "content_signature": (),
+        "error_message": "Select an Active User to view files from a PC running DriveAgent.exe.",
+        "filter_options": FILTER_OPTIONS,
+        "filter_type": filter_type,
+        "is_scanning": False,
+        "last_scanned": None,
+        "last_scanned_display": "Waiting for Active User",
+        "maximum_reached": False,
+        "next_scan_at": None,
+        "next_scan_display": "Waiting for Active User",
+        "search_query": search_query,
+        "selected_drive_value": drive_root_to_value(selected_drive_root),
+        "drive_options": get_drive_options(selected_drive_root),
+        "refresh_interval_ms": FRONTEND_REFRESH_SECONDS * 1000,
+        "active_agents_refresh_interval_ms": ACTIVE_AGENTS_REFRESH_SECONDS * 1000,
+        "active_agents": active_agents_payload["agents"],
+        "active_agents_total": active_agents_payload["total_agents"],
+        "active_agents_online": active_agents_payload["online_agents"],
+        "version": 0,
+        "total_files": 0,
+        "total_files_display": "0",
+        "current_files_display": "0",
+        "processed_files_display": "0",
+        "failed_files_display": "0",
+        "progress_percent": 0,
+        "sync_status_title": "Waiting for Active User",
+        "system_info": {
+            "host_name": "Select Active User",
+            "ip_address": "Unavailable",
+            "mac_address": "Unavailable",
+            "os_label": "Waiting for DriveAgent.exe",
+            "architecture": "Select a hostname below",
+        },
+        "storage_info": {
+            "available": False,
+            "used_display": "Unavailable",
+            "total_display": "Unavailable",
+            "free_display": "Unavailable",
+            "percent_used": 0,
+        },
+        "distribution_items": type_distribution["items"],
+        "distribution_gradient": type_distribution["gradient"],
+        "recent_activity": [],
+    }
 
 
 def _format_last_scan_parts(snapshot):
@@ -1183,6 +1432,9 @@ def _build_drive_files_context(request, selected_drive_root=None, scanner_ready=
     if selected_drive_root is None:
         selected_drive_root = _get_selected_drive_root(request)
 
+    if not _local_drive_scanner_enabled():
+        return _build_hosted_waiting_context(request, selected_drive_root)
+
     if not scanner_ready:
         set_drive_root(selected_drive_root)
         start_background_scanner()
@@ -1259,6 +1511,11 @@ def drive_files_data(request):
         return _drive_files_json_response(context, request=request)
 
     selected_drive_root = _get_selected_drive_root(request)
+
+    if not _local_drive_scanner_enabled():
+        context = _build_hosted_waiting_context(request, selected_drive_root)
+        return _drive_files_json_response(context, request=request)
+
     set_drive_root(selected_drive_root)
     start_background_scanner()
     scan_metadata = get_scan_metadata()
@@ -1343,6 +1600,21 @@ def agent_heartbeat(request):
         )
 
     drives = _normalize_agent_drives(payload.get("drives"))
+    available_drive_values = [drive["value"] for drive in drives if drive["value"]]
+    existing_agent = ActiveAgent.objects.filter(agent_id=agent_id).first()
+    existing_payload = (
+        existing_agent.latest_payload
+        if existing_agent and isinstance(existing_agent.latest_payload, dict)
+        else {}
+    )
+    requested_drive_values = _normalize_requested_drive_values(
+        existing_payload.get("requested_drive_values"),
+        available_drive_values,
+    )
+    requested_file_downloads = _normalize_requested_file_downloads(
+        existing_payload.get("requested_file_downloads"),
+        available_drive_values,
+    )
     total_files = sum(drive["total_files"] for drive in drives)
     host_name = str(payload.get("host_name") or agent_id)[:255]
     ip_address = str(
@@ -1356,6 +1628,8 @@ def agent_heartbeat(request):
     latest_payload = {
         "drives": drives,
         "reported_at": timezone.now().isoformat(),
+        "requested_drive_values": [],
+        "requested_file_downloads": [],
     }
 
     agent, _created = ActiveAgent.objects.update_or_create(
@@ -1398,6 +1672,8 @@ def agent_heartbeat(request):
             "ok": True,
             "agent_id": agent_id,
             "server_time": timezone.now().isoformat(),
+            "requested_drive_values": requested_drive_values,
+            "requested_file_downloads": requested_file_downloads,
         }
     )
 
@@ -1567,6 +1843,111 @@ def agent_files_batch(request):
 
 @csrf_exempt
 @require_POST
+def agent_file_download(request):
+    if not _is_agent_request_authorized(request):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Unauthorized agent token.",
+            },
+            status=403,
+        )
+
+    agent_id = _safe_text(request.headers.get("X-Agent-Id"), 128).strip()
+    request_id = _safe_text(request.headers.get("X-Download-Request-Id"), 64).strip()
+    upload_status = _safe_text(
+        request.headers.get("X-Download-Status") or "ready",
+        16,
+    ).strip().lower()
+
+    if not agent_id or not request_id:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "agent id and download request id are required.",
+            },
+            status=400,
+        )
+
+    download_request = (
+        RemoteFileDownload.objects.select_related("agent")
+        .filter(
+            request_id=request_id,
+            agent__agent_id=agent_id,
+        )
+        .first()
+    )
+
+    if not download_request:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "download request was not found.",
+            },
+            status=404,
+        )
+
+    if upload_status == RemoteFileDownload.STATUS_FAILED:
+        download_request.status = RemoteFileDownload.STATUS_FAILED
+        download_request.error_message = _safe_text(
+            request.headers.get("X-Download-Error"),
+            512,
+            default="Agent could not read this file.",
+        )
+        download_request.save(update_fields=("status", "error_message", "updated_at"))
+        return JsonResponse({"ok": True, "status": download_request.status})
+
+    download_path = _remote_download_storage_path(download_request)
+    download_path.parent.mkdir(parents=True, exist_ok=True)
+    total_size = 0
+
+    try:
+        with download_path.open("wb") as output_file:
+            while True:
+                chunk = request.read(1024 * 1024)
+
+                if not chunk:
+                    break
+
+                total_size += len(chunk)
+                output_file.write(chunk)
+    except OSError as error:
+        download_request.status = RemoteFileDownload.STATUS_FAILED
+        download_request.error_message = _safe_text(str(error), 512)
+        download_request.save(update_fields=("status", "error_message", "updated_at"))
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "server could not store the uploaded file.",
+            },
+            status=500,
+        )
+
+    download_request.status = RemoteFileDownload.STATUS_READY
+    download_request.file_path = str(download_path)
+    download_request.size_bytes = total_size
+    download_request.error_message = ""
+    download_request.save(
+        update_fields=(
+            "status",
+            "file_path",
+            "size_bytes",
+            "error_message",
+            "updated_at",
+        )
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "status": download_request.status,
+            "size_bytes": total_size,
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
 def agent_uninstall(request):
     if not _is_agent_request_authorized(request):
         return JsonResponse(
@@ -1644,6 +2025,10 @@ def select_agent(request):
             )
 
         _set_selected_agent(request, selected_agent.agent_id)
+        _queue_agent_drive_scan(
+            selected_agent,
+            _get_selected_agent_drive_value(request, selected_agent),
+        )
     else:
         _set_selected_agent(request, "")
 
@@ -1669,6 +2054,7 @@ def select_drive(request):
             selected_agent,
             request.POST.get("drive_root"),
         )
+        _queue_agent_drive_scan(selected_agent, selected_drive_value)
         context = _build_agent_files_context(request, selected_agent)
 
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
@@ -1686,6 +2072,22 @@ def select_drive(request):
 
     selected_drive_root = _resolve_drive_root(request.POST.get("drive_root"))
     _set_selected_drive_root(request, selected_drive_root)
+
+    if not _local_drive_scanner_enabled():
+        context = _build_hosted_waiting_context(request, selected_drive_root)
+
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return _drive_files_json_response(
+                context,
+                request=request,
+                extra_payload={
+                    "drive_changed": False,
+                    "drive_switch_requested": True,
+                },
+            )
+
+        return redirect("drive_files")
+
     drive_changed = set_drive_root(selected_drive_root)
     request_drive_scan()
 
@@ -1707,11 +2109,25 @@ def select_drive(request):
 @login_required
 @require_POST
 def scan_now(request):
-    if _get_selected_agent(request):
+    selected_agent = _get_selected_agent(request)
+
+    if selected_agent:
+        selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+        _queue_agent_drive_scan(selected_agent, selected_drive_value)
+
         return JsonResponse(
             {
                 "requested": True,
                 "remote_agent": True,
+                "selected_drive_value": selected_drive_value,
+            }
+        )
+
+    if not _local_drive_scanner_enabled():
+        return JsonResponse(
+            {
+                "requested": False,
+                "local_scanner_disabled": True,
             }
         )
 
@@ -1749,9 +2165,70 @@ def download_file(request):
     """
 
     relative_path = request.GET.get("path")
+    selected_agent = _get_selected_agent(request)
 
-    if _get_selected_agent(request):
-        raise Http404("Remote file download is not available from the dashboard.")
+    if selected_agent:
+        if not relative_path:
+            raise Http404("File path was not provided.")
+
+        selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+        selected_drive = selected_agent.drive_reports.filter(
+            value=selected_drive_value,
+        ).first()
+
+        if not selected_drive:
+            raise Http404("Selected remote drive was not found.")
+
+        file_report = selected_drive.file_reports.filter(
+            relative_path=relative_path,
+        ).first()
+
+        if not file_report:
+            raise Http404("Remote file was not found.")
+
+        ready_download = _ready_remote_download_for_file(
+            selected_agent,
+            selected_drive,
+            file_report,
+        )
+
+        if ready_download:
+            ready_response = _remote_download_file_response(ready_download)
+
+            if ready_response:
+                return ready_response
+
+        download_request = _queue_agent_file_download(
+            selected_agent,
+            selected_drive,
+            file_report,
+        )
+        deadline = time.monotonic() + getattr(
+            settings,
+            "AGENT_FILE_DOWNLOAD_WAIT_SECONDS",
+            20,
+        )
+
+        while time.monotonic() < deadline:
+            time.sleep(0.5)
+            download_request.refresh_from_db()
+
+            if download_request.status == RemoteFileDownload.STATUS_READY:
+                ready_response = _remote_download_file_response(download_request)
+
+                if ready_response:
+                    return ready_response
+
+            if download_request.status == RemoteFileDownload.STATUS_FAILED:
+                raise Http404(
+                    download_request.error_message
+                    or "Agent could not download this file."
+                )
+
+        raise Http404("File is being prepared. Please try again in a few seconds.")
+
+    if not _local_drive_scanner_enabled():
+        raise Http404("Hosted local file download is disabled.")
 
     if not relative_path:
         raise Http404("File path was not provided.")

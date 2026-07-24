@@ -24,11 +24,22 @@ HEARTBEAT_SECONDS_ENV = "DRIVE_AGENT_HEARTBEAT_SECONDS"
 COUNT_REFRESH_SECONDS_ENV = "DRIVE_AGENT_COUNT_REFRESH_SECONDS"
 FILE_BATCH_SIZE_ENV = "DRIVE_AGENT_FILE_BATCH_SIZE"
 CHANGE_DEBOUNCE_SECONDS_ENV = "DRIVE_AGENT_CHANGE_DEBOUNCE_SECONDS"
-DEFAULT_HEARTBEAT_SECONDS = 30
-DEFAULT_COUNT_REFRESH_SECONDS = 300
-DEFAULT_FILE_BATCH_SIZE = 500
-DEFAULT_CHANGE_DEBOUNCE_SECONDS = 3
+FIRST_FILE_BATCH_SIZE_ENV = "DRIVE_AGENT_FIRST_FILE_BATCH_SIZE"
+FILE_BATCH_INTERVAL_SECONDS_ENV = "DRIVE_AGENT_FILE_BATCH_INTERVAL_SECONDS"
+DRIVE_PRIORITY_ENV = "DRIVE_AGENT_DRIVE_PRIORITY"
+PRIORITY_FOLDERS_ENV = "DRIVE_AGENT_PRIORITY_FOLDERS"
+LOG_FILE_ENV = "DRIVE_AGENT_LOG_FILE"
+LAN_DISCOVERY_ENABLED_ENV = "DRIVE_AGENT_LAN_DISCOVERY_ENABLED"
+FALLBACK_HEARTBEAT_SECONDS = 1
+FALLBACK_COUNT_REFRESH_SECONDS = 60
+FALLBACK_FILE_BATCH_SIZE = 250
+FALLBACK_CHANGE_DEBOUNCE_SECONDS = 1
+FALLBACK_LAN_DISCOVERY_ENABLED = False
 DEFAULT_DISCOVERY_PORT = 8000
+LOCAL_DEFAULT_SERVER_URL = "http://127.0.0.1:8000/agent-heartbeat/"
+FALLBACK_DRIVE_PRIORITY = "D,C"
+FALLBACK_FIRST_FILE_BATCH_SIZE = 10
+FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 1
 APP_DIRECTORY_NAME = "DriveAgent"
 RUN_REGISTRY_NAME = "DriveAgent"
 EXCLUDED_FOLDER_NAMES = {
@@ -36,6 +47,14 @@ EXCLUDED_FOLDER_NAMES = {
     "recycled",
     "recycler",
     "system volume information",
+}
+PRIORITY_FOLDER_NAMES = {
+    "desktop",
+    "documents",
+    "downloads",
+    "onedrive",
+    "pictures",
+    "users",
 }
 PDF_EXTENSIONS = frozenset({".pdf"})
 DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".rtf", ".odt"})
@@ -47,16 +66,66 @@ VIDEO_EXTENSIONS = frozenset({".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv", "
 ARCHIVE_EXTENSIONS = frozenset({".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"})
 
 try:
-    from agent_build_defaults import (
-        DEFAULT_API_TOKEN as BUILD_DEFAULT_API_TOKEN,
-        DEFAULT_SERVER_URL as BUILD_DEFAULT_SERVER_URL,
-    )
+    import agent_build_defaults as build_defaults
 except ImportError:
-    BUILD_DEFAULT_SERVER_URL = "http://192.168.1.7:8000/agent-heartbeat/"
-    BUILD_DEFAULT_API_TOKEN = "drive-agent-local-token"
+    build_defaults = None
+
+BUILD_DEFAULT_SERVER_URL = getattr(
+    build_defaults,
+    "DEFAULT_SERVER_URL",
+    LOCAL_DEFAULT_SERVER_URL,
+)
+BUILD_DEFAULT_API_TOKEN = getattr(
+    build_defaults,
+    "DEFAULT_API_TOKEN",
+    "drive-agent-local-token",
+)
+BUILD_DEFAULT_DRIVE_PRIORITY = getattr(
+    build_defaults,
+    "DEFAULT_DRIVE_PRIORITY",
+    FALLBACK_DRIVE_PRIORITY,
+)
+BUILD_DEFAULT_FIRST_FILE_BATCH_SIZE = getattr(
+    build_defaults,
+    "DEFAULT_FIRST_FILE_BATCH_SIZE",
+    FALLBACK_FIRST_FILE_BATCH_SIZE,
+)
+BUILD_DEFAULT_FILE_BATCH_INTERVAL_SECONDS = getattr(
+    build_defaults,
+    "DEFAULT_FILE_BATCH_INTERVAL_SECONDS",
+    FALLBACK_FILE_BATCH_INTERVAL_SECONDS,
+)
 
 DEFAULT_SERVER_URL = BUILD_DEFAULT_SERVER_URL
 DEFAULT_API_TOKEN = BUILD_DEFAULT_API_TOKEN
+DEFAULT_HEARTBEAT_SECONDS = getattr(
+    build_defaults,
+    "DEFAULT_HEARTBEAT_SECONDS",
+    FALLBACK_HEARTBEAT_SECONDS,
+)
+DEFAULT_COUNT_REFRESH_SECONDS = getattr(
+    build_defaults,
+    "DEFAULT_COUNT_REFRESH_SECONDS",
+    FALLBACK_COUNT_REFRESH_SECONDS,
+)
+DEFAULT_FILE_BATCH_SIZE = getattr(
+    build_defaults,
+    "DEFAULT_FILE_BATCH_SIZE",
+    FALLBACK_FILE_BATCH_SIZE,
+)
+DEFAULT_CHANGE_DEBOUNCE_SECONDS = getattr(
+    build_defaults,
+    "DEFAULT_CHANGE_DEBOUNCE_SECONDS",
+    FALLBACK_CHANGE_DEBOUNCE_SECONDS,
+)
+DEFAULT_LAN_DISCOVERY_ENABLED = getattr(
+    build_defaults,
+    "DEFAULT_LAN_DISCOVERY_ENABLED",
+    FALLBACK_LAN_DISCOVERY_ENABLED,
+)
+DEFAULT_DRIVE_PRIORITY = BUILD_DEFAULT_DRIVE_PRIORITY
+DEFAULT_FIRST_FILE_BATCH_SIZE = BUILD_DEFAULT_FIRST_FILE_BATCH_SIZE
+DEFAULT_FILE_BATCH_INTERVAL_SECONDS = BUILD_DEFAULT_FILE_BATCH_INTERVAL_SECONDS
 
 
 def _runtime_directory():
@@ -86,11 +155,21 @@ def _same_file(first_path, second_path):
         return Path(first_path).resolve() == Path(second_path).resolve()
 
 
+def _powershell_single_quote(value):
+    return str(value).replace("'", "''")
+
+
 def _startup_command(executable_path, server_url, api_token):
+    executable = _powershell_single_quote(executable_path)
+    server = _powershell_single_quote(server_url)
+    token = _powershell_single_quote(api_token)
+
     return (
-        f'"{executable_path}" --run-agent '
-        f'--server-url "{server_url}" '
-        f'--api-token "{api_token}"'
+        'powershell.exe -NoProfile -ExecutionPolicy Bypass '
+        '-WindowStyle Hidden -Command '
+        f'"Start-Process -WindowStyle Hidden -FilePath \'{executable}\' '
+        f'-ArgumentList @(\'--run-agent\',\'--server-url\',\'{server}\','
+        f'\'--api-token\',\'{token}\')"'
     )
 
 
@@ -317,8 +396,21 @@ def log_message(message):
         except OSError:
             pass
 
+    log_file_value = os.environ.get(LOG_FILE_ENV, "").strip()
+
+    if not log_file_value:
+        return
+
+    log_path = (
+        Path(log_file_value)
+        if log_file_value.lower() not in {"1", "true", "yes", "on"}
+        else _application_directory() / "agent.log"
+    )
+
     try:
-        with (_runtime_directory() / "agent.log").open("a", encoding="utf-8") as log_file:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with log_path.open("a", encoding="utf-8") as log_file:
             log_file.write(f"{formatted_message}\n")
     except OSError:
         pass
@@ -357,6 +449,91 @@ def _positive_int(value, default):
     return parsed_value if parsed_value > 0 else default
 
 
+def _positive_float(value, default):
+    try:
+        parsed_value = float(value)
+    except (TypeError, ValueError):
+        return default
+
+    return parsed_value if parsed_value > 0 else default
+
+
+def _boolean_value(value, default=False):
+    if isinstance(value, bool):
+        return value
+
+    if value in (None, ""):
+        return default
+
+    normalized_value = str(value).strip().lower()
+
+    if normalized_value in {"1", "true", "yes", "y", "on"}:
+        return True
+
+    if normalized_value in {"0", "false", "no", "n", "off"}:
+        return False
+
+    return default
+
+
+def _split_config_values(value):
+    if isinstance(value, (list, tuple, set)):
+        raw_values = value
+    else:
+        raw_values = str(value or "").replace(";", ",").split(",")
+
+    return [str(raw_value).strip() for raw_value in raw_values if str(raw_value).strip()]
+
+
+def _drive_letter(value):
+    normalized_value = str(value or "").replace("\\", "/").strip().upper()
+
+    if len(normalized_value) >= 2 and normalized_value[1] == ":":
+        return normalized_value[0]
+
+    if len(normalized_value) == 1 and normalized_value in string.ascii_uppercase:
+        return normalized_value
+
+    return ""
+
+
+def _drive_priority_letters(value, default_value=FALLBACK_DRIVE_PRIORITY):
+    letters = []
+    seen_letters = set()
+
+    for raw_value in _split_config_values(value):
+        letter = _drive_letter(raw_value)
+
+        if letter and letter not in seen_letters:
+            seen_letters.add(letter)
+            letters.append(letter)
+
+    if letters:
+        return tuple(letters)
+
+    if value != default_value:
+        return _drive_priority_letters(default_value, "")
+
+    return ()
+
+
+def _priority_folder_names(value):
+    configured_folder_names = {
+        folder_name.lower()
+        for folder_name in _split_config_values(value)
+    }
+
+    if not configured_folder_names:
+        configured_folder_names = set(PRIORITY_FOLDER_NAMES)
+
+    current_user_folder_name = Path.home().name.lower()
+
+    if current_user_folder_name:
+        configured_folder_names.add(current_user_folder_name)
+
+    return frozenset(configured_folder_names)
+
+
 def discover_drive_roots():
     if os.name == "nt":
         try:
@@ -375,6 +552,24 @@ def discover_drive_roots():
     return [Path("/")]
 
 
+def _drive_sort_key(root, drive_priority):
+    letter = _drive_letter(root)
+    preferred_index = (
+        drive_priority.index(letter)
+        if letter in drive_priority
+        else len(drive_priority)
+    )
+
+    return (preferred_index, str(root).lower())
+
+
+def ordered_drive_roots(drive_priority=()):
+    return sorted(
+        discover_drive_roots(),
+        key=lambda root: _drive_sort_key(root, drive_priority),
+    )
+
+
 def drive_value(root):
     value = str(root).replace("\\", "/")
 
@@ -382,6 +577,15 @@ def drive_value(root):
         value = f"{value}/"
 
     return value
+
+
+def normalize_drive_value(value):
+    normalized_value = str(value or "").replace("\\", "/").strip()
+
+    if normalized_value.endswith(":"):
+        normalized_value = f"{normalized_value}/"
+
+    return normalized_value
 
 
 def drive_label(root):
@@ -496,6 +700,15 @@ def file_type_metadata(extension):
     }
 
 
+def _folder_scan_key(folder_path, priority_folder_names):
+    folder_name = Path(folder_path).name.lower()
+
+    return (
+        0 if folder_name in priority_folder_names else 1,
+        folder_name,
+    )
+
+
 def file_metadata(root, entry):
     try:
         stat_result = entry.stat(follow_symlinks=False)
@@ -545,6 +758,10 @@ def build_agent_endpoint_url(server_url, endpoint_name):
 
 def build_files_batch_url(server_url):
     return build_agent_endpoint_url(server_url, "agent-files-batch")
+
+
+def build_file_download_url(server_url):
+    return build_agent_endpoint_url(server_url, "agent-file-download")
 
 
 def build_uninstall_url(server_url):
@@ -637,8 +854,15 @@ def discovery_candidates(preferred_url):
     return candidates
 
 
-def discover_dashboard_server(preferred_url, force_scan=False):
+def discover_dashboard_server(
+    preferred_url,
+    force_scan=False,
+    lan_discovery_enabled=False,
+):
     if not force_scan and dashboard_ping_ok(preferred_url):
+        return preferred_url
+
+    if not lan_discovery_enabled:
         return preferred_url
 
     candidates = [
@@ -673,15 +897,30 @@ def discover_dashboard_server(preferred_url, force_scan=False):
 
 
 class FileCountCache:
-    def __init__(self, refresh_seconds, server_url, api_token, batch_size):
+    def __init__(
+        self,
+        refresh_seconds,
+        server_url,
+        api_token,
+        batch_size,
+        first_batch_size,
+        batch_interval_seconds,
+        drive_priority,
+        priority_folder_names,
+    ):
         self.refresh_seconds = refresh_seconds
         self.server_url = server_url
         self.files_batch_url = build_files_batch_url(server_url)
         self.api_token = api_token
         self.batch_size = batch_size
+        self.first_batch_size = first_batch_size
+        self.batch_interval_seconds = batch_interval_seconds
+        self.drive_priority = drive_priority
+        self.priority_folder_names = priority_folder_names
         self.identity = machine_identity()
         self._lock = threading.RLock()
         self._counts = {}
+        self._active_scan_values = set()
         self._condition = threading.Condition()
         self._requested_drive_values = set()
         self._stop_event = threading.Event()
@@ -701,6 +940,39 @@ class FileCountCache:
             self.server_url = server_url
             self.files_batch_url = build_files_batch_url(server_url)
 
+    def _root_for_drive_value(self, requested_drive_value):
+        normalized_requested_value = normalize_drive_value(requested_drive_value)
+
+        for root in ordered_drive_roots(self.drive_priority):
+            if drive_value(root) == normalized_requested_value:
+                return root
+
+        return None
+
+    def request_scan_value(self, requested_drive_value):
+        root = self._root_for_drive_value(requested_drive_value)
+
+        if root:
+            self.request_scan(root)
+
+    def resolve_file_request(self, drive_value_to_resolve, relative_path):
+        root = self._root_for_drive_value(drive_value_to_resolve)
+
+        if not root:
+            return None, "Requested drive is not available."
+
+        try:
+            root_path = root.resolve()
+            requested_file = (root_path / str(relative_path)).resolve()
+            requested_file.relative_to(root_path)
+        except (OSError, ValueError):
+            return None, "Requested file path is invalid."
+
+        if not requested_file.exists() or not requested_file.is_file():
+            return None, "Requested file was not found."
+
+        return requested_file, ""
+
     def request_scan(self, root):
         root_value = drive_value(root)
 
@@ -708,7 +980,16 @@ class FileCountCache:
             self._requested_drive_values.add(root_value)
             self._condition.notify_all()
 
+        self._start_priority_scan(root)
         log_message(f"Queued real-time scan for {drive_label(root)}.")
+
+    def _start_priority_scan(self, root):
+        scan_thread = threading.Thread(
+            target=self._run_drive_scan,
+            args=(root,),
+            daemon=True,
+        )
+        scan_thread.start()
 
     def snapshot(self, value):
         with self._lock:
@@ -762,6 +1043,22 @@ class FileCountCache:
         except (OSError, urllib.error.URLError, urllib.error.HTTPError) as error:
             log_message(f"File batch failed for {drive_label(root)}: {error}")
 
+    def _run_drive_scan(self, root):
+        root_value = drive_value(root)
+
+        with self._lock:
+            if root_value in self._active_scan_values:
+                return False
+
+            self._active_scan_values.add(root_value)
+
+        try:
+            self._count_drive_files(root)
+            return True
+        finally:
+            with self._lock:
+                self._active_scan_values.discard(root_value)
+
     def _count_drive_files(self, root):
         total_files = 0
         root_value = drive_value(root)
@@ -770,19 +1067,41 @@ class FileCountCache:
         batch_index = 0
         scan_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
         storage_info = drive_storage(root)
+        last_batch_posted_at = time.monotonic()
 
         self._set_count(root_value, total_files, False)
+
+        def post_partial_batch(scan_complete=False):
+            nonlocal batch_index
+            nonlocal file_batch
+            nonlocal last_batch_posted_at
+
+            self._post_files_batch(
+                root,
+                scan_id,
+                batch_index,
+                file_batch,
+                total_files,
+                scan_complete,
+                storage_info,
+            )
+            self._set_count(root_value, total_files, scan_complete)
+            batch_index += 1
+            file_batch = []
+            last_batch_posted_at = time.monotonic()
 
         while pending_folders and not self._stop_event.is_set():
             current_folder = pending_folders.pop()
 
             try:
+                folder_paths = []
+
                 with os.scandir(current_folder) as entries:
                     for entry in entries:
                         try:
                             if entry.is_dir(follow_symlinks=False):
                                 if entry.name.lower() not in EXCLUDED_FOLDER_NAMES:
-                                    pending_folders.append(entry.path)
+                                    folder_paths.append(entry.path)
                             elif entry.is_file(follow_symlinks=False):
                                 metadata = file_metadata(root, entry)
                                 total_files += 1
@@ -790,46 +1109,53 @@ class FileCountCache:
                                 if metadata:
                                     file_batch.append(metadata)
 
-                                if len(file_batch) >= self.batch_size:
-                                    self._post_files_batch(
-                                        root,
-                                        scan_id,
-                                        batch_index,
-                                        file_batch,
-                                        total_files,
-                                        False,
-                                        storage_info,
+                                next_batch_size = (
+                                    min(self.first_batch_size, self.batch_size)
+                                    if batch_index == 0
+                                    else self.batch_size
+                                )
+                                should_post_batch = (
+                                    file_batch
+                                    and (
+                                        len(file_batch) >= next_batch_size
+                                        or time.monotonic() - last_batch_posted_at
+                                        >= self.batch_interval_seconds
                                     )
-                                    batch_index += 1
-                                    file_batch = []
+                                )
 
-                                if total_files % 1000 == 0:
+                                if should_post_batch:
+                                    post_partial_batch(False)
+
+                                if total_files % self.batch_size == 0:
                                     self._set_count(root_value, total_files, False)
                         except OSError:
                             continue
+
+                pending_folders.extend(
+                    reversed(
+                        sorted(
+                            folder_paths,
+                            key=lambda folder_path: _folder_scan_key(
+                                folder_path,
+                                self.priority_folder_names,
+                            ),
+                        )
+                    )
+                )
             except OSError:
                 continue
 
-        self._post_files_batch(
-            root,
-            scan_id,
-            batch_index,
-            file_batch,
-            total_files,
-            True,
-            storage_info,
-        )
-        self._set_count(root_value, total_files, True)
+        post_partial_batch(True)
 
     def _run(self):
         while not self._stop_event.is_set():
-            roots = discover_drive_roots()
+            roots = ordered_drive_roots(self.drive_priority)
 
             for root in roots:
                 if self._stop_event.is_set():
                     break
 
-                self._count_drive_files(root)
+                self._run_drive_scan(root)
 
             next_full_scan_at = time.monotonic() + self.refresh_seconds
 
@@ -854,20 +1180,31 @@ class FileCountCache:
 
                 available_roots = {
                     drive_value(root): root
-                    for root in discover_drive_roots()
+                    for root in ordered_drive_roots(self.drive_priority)
                 }
 
-                for requested_drive_value in requested_drive_values:
-                    root = available_roots.get(requested_drive_value)
+                requested_roots = [
+                    available_roots[requested_drive_value]
+                    for requested_drive_value in requested_drive_values
+                    if requested_drive_value in available_roots
+                ]
 
-                    if root and not self._stop_event.is_set():
-                        self._count_drive_files(root)
+                for root in sorted(
+                    requested_roots,
+                    key=lambda requested_root: _drive_sort_key(
+                        requested_root,
+                        self.drive_priority,
+                    ),
+                ):
+                    if not self._stop_event.is_set():
+                        self._run_drive_scan(root)
 
 
 class DriveChangeWatcher:
-    def __init__(self, count_cache, debounce_seconds):
+    def __init__(self, count_cache, debounce_seconds, drive_priority):
         self.count_cache = count_cache
         self.debounce_seconds = debounce_seconds
+        self.drive_priority = drive_priority
         self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._timers = {}
@@ -878,7 +1215,7 @@ class DriveChangeWatcher:
             log_message("Real-time drive watching is only available on Windows.")
             return
 
-        for root in discover_drive_roots():
+        for root in ordered_drive_roots(self.drive_priority):
             watcher_thread = threading.Thread(
                 target=self._watch_drive,
                 args=(root,),
@@ -1033,8 +1370,11 @@ def drive_storage(root):
 def collect_payload(count_cache):
     payload = machine_identity()
     drives = []
+    drive_priority = count_cache.drive_priority if count_cache else _drive_priority_letters(
+        DEFAULT_DRIVE_PRIORITY
+    )
 
-    for root in discover_drive_roots():
+    for root in ordered_drive_roots(drive_priority):
         value = drive_value(root)
         count_snapshot = count_cache.snapshot(value) if count_cache else {
             "total_files": 0,
@@ -1056,7 +1396,7 @@ def collect_payload(count_cache):
     return payload
 
 
-def post_json(url, api_token, payload):
+def post_json(url, api_token, payload, return_payload=False):
     request = urllib.request.Request(
         url,
         data=json.dumps(payload).encode("utf-8"),
@@ -1068,11 +1408,61 @@ def post_json(url, api_token, payload):
     )
 
     with urllib.request.urlopen(request, timeout=10) as response:
-        return response.status
+        if not return_payload:
+            return response.status
+
+        response_body = response.read().decode("utf-8")
+
+        try:
+            response_payload = json.loads(response_body) if response_body else {}
+        except json.JSONDecodeError:
+            response_payload = {}
+
+        return response.status, response_payload
 
 
 def post_heartbeat(server_url, api_token, payload):
-    return post_json(server_url, api_token, payload)
+    return post_json(server_url, api_token, payload, return_payload=True)
+
+
+def report_file_download_failure(server_url, api_token, identity, download_request, error):
+    request = urllib.request.Request(
+        build_file_download_url(server_url),
+        data=b"",
+        headers={
+            "X-Agent-Token": api_token,
+            "X-Agent-Id": identity["agent_id"],
+            "X-Download-Request-Id": str(download_request.get("request_id") or ""),
+            "X-Download-Status": "failed",
+            "X-Download-Error": str(error)[:512],
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return response.status
+
+
+def upload_file_download(server_url, api_token, identity, download_request, file_path):
+    file_size = file_path.stat().st_size
+
+    with file_path.open("rb") as file_stream:
+        request = urllib.request.Request(
+            build_file_download_url(server_url),
+            data=file_stream,
+            headers={
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(file_size),
+                "X-Agent-Token": api_token,
+                "X-Agent-Id": identity["agent_id"],
+                "X-Download-Request-Id": str(download_request.get("request_id") or ""),
+                "X-Download-Status": "ready",
+            },
+            method="POST",
+        )
+
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return response.status
 
 
 def unregister_agent(server_url, api_token):
@@ -1090,6 +1480,62 @@ def unregister_agent(server_url, api_token):
         return False
 
 
+def handle_requested_file_download(server_url, api_token, count_cache, download_request):
+    request_id = str(download_request.get("request_id") or "")
+    file_path, error = count_cache.resolve_file_request(
+        download_request.get("drive_value"),
+        download_request.get("relative_path"),
+    )
+
+    try:
+        if error:
+            status = report_file_download_failure(
+                server_url,
+                api_token,
+                count_cache.identity,
+                download_request,
+                error,
+            )
+            log_message(
+                f"Reported file download failure for request {request_id} "
+                f"with status {status}."
+            )
+            return
+
+        status = upload_file_download(
+            server_url,
+            api_token,
+            count_cache.identity,
+            download_request,
+            file_path,
+        )
+        log_message(
+            f"Uploaded requested file for request {request_id} with status {status}."
+        )
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError) as upload_error:
+        log_message(
+            f"Unable to upload requested file for request {request_id}: {upload_error}"
+        )
+
+
+def queue_requested_file_downloads(server_url, api_token, count_cache, response_payload):
+    requested_downloads = response_payload.get("requested_file_downloads", [])
+
+    if not isinstance(requested_downloads, list):
+        return
+
+    for download_request in requested_downloads[:8]:
+        if not isinstance(download_request, dict):
+            continue
+
+        worker = threading.Thread(
+            target=handle_requested_file_download,
+            args=(server_url, api_token, count_cache, download_request),
+            daemon=True,
+        )
+        worker.start()
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         description="Report this PC's drive information to the Drive File Agent dashboard."
@@ -1099,7 +1545,12 @@ def build_parser():
     parser.add_argument("--heartbeat-seconds", type=int, help="Seconds between reports.")
     parser.add_argument("--count-refresh-seconds", type=int, help="Seconds between full file recounts.")
     parser.add_argument("--file-batch-size", type=int, help="Files sent in each metadata batch.")
+    parser.add_argument("--first-file-batch-size", type=int, help="Files sent before the first partial metadata report.")
+    parser.add_argument("--file-batch-interval-seconds", type=float, help="Maximum seconds to wait before sending a partial metadata report.")
     parser.add_argument("--change-debounce-seconds", type=int, help="Seconds to wait after file changes before rescanning a drive.")
+    parser.add_argument("--drive-priority", help="Comma-separated drive priority, for example D,C,E.")
+    parser.add_argument("--priority-folders", help="Comma-separated folder names to scan early on large drives.")
+    parser.add_argument("--lan-discovery-enabled", help="Set true only for same-LAN local testing. Public hosted dashboards should keep this false.")
     parser.add_argument("--once", action="store_true", help="Send one report and exit.")
     parser.add_argument("--unregister", action="store_true", help="Remove this PC from the admin dashboard and exit.")
     parser.add_argument("--uninstall", action="store_true", help="Remove this PC from the dashboard, startup, and local install.")
@@ -1123,7 +1574,21 @@ def main():
         API_TOKEN_ENV,
         DEFAULT_API_TOKEN,
     )
-    server_url = discover_dashboard_server(server_url)
+    lan_discovery_enabled = _boolean_value(
+        args.lan_discovery_enabled
+        if args.lan_discovery_enabled not in (None, "")
+        else _config_value(
+            config,
+            "lan_discovery_enabled",
+            LAN_DISCOVERY_ENABLED_ENV,
+            DEFAULT_LAN_DISCOVERY_ENABLED,
+        ),
+        DEFAULT_LAN_DISCOVERY_ENABLED,
+    )
+    server_url = discover_dashboard_server(
+        server_url,
+        lan_discovery_enabled=lan_discovery_enabled,
+    )
 
     if args.unregister or args.uninstall:
         unregister_agent(server_url, api_token)
@@ -1173,6 +1638,26 @@ def main():
         ),
         DEFAULT_FILE_BATCH_SIZE,
     )
+    first_file_batch_size = _positive_int(
+        args.first_file_batch_size
+        or _config_value(
+            config,
+            "first_file_batch_size",
+            FIRST_FILE_BATCH_SIZE_ENV,
+            DEFAULT_FIRST_FILE_BATCH_SIZE,
+        ),
+        DEFAULT_FIRST_FILE_BATCH_SIZE,
+    )
+    file_batch_interval_seconds = _positive_float(
+        args.file_batch_interval_seconds
+        or _config_value(
+            config,
+            "file_batch_interval_seconds",
+            FILE_BATCH_INTERVAL_SECONDS_ENV,
+            DEFAULT_FILE_BATCH_INTERVAL_SECONDS,
+        ),
+        DEFAULT_FILE_BATCH_INTERVAL_SECONDS,
+    )
     change_debounce_seconds = _positive_int(
         args.change_debounce_seconds
         or _config_value(
@@ -1183,13 +1668,40 @@ def main():
         ),
         DEFAULT_CHANGE_DEBOUNCE_SECONDS,
     )
+    drive_priority = _drive_priority_letters(
+        args.drive_priority
+        or _config_value(
+            config,
+            "drive_priority",
+            DRIVE_PRIORITY_ENV,
+            DEFAULT_DRIVE_PRIORITY,
+        ),
+        DEFAULT_DRIVE_PRIORITY,
+    )
+    priority_folder_names = _priority_folder_names(
+        args.priority_folders
+        or _config_value(
+            config,
+            "priority_folders",
+            PRIORITY_FOLDERS_ENV,
+            ",".join(sorted(PRIORITY_FOLDER_NAMES)),
+        )
+    )
     count_cache = FileCountCache(
         count_refresh_seconds,
         server_url,
         api_token,
         file_batch_size,
+        first_file_batch_size,
+        file_batch_interval_seconds,
+        drive_priority,
+        priority_folder_names,
     )
-    change_watcher = DriveChangeWatcher(count_cache, change_debounce_seconds)
+    change_watcher = DriveChangeWatcher(
+        count_cache,
+        change_debounce_seconds,
+        drive_priority,
+    )
     count_cache.start()
     change_watcher.start()
     log_message(f"DriveAgent started. Reporting to {server_url}.")
@@ -1199,13 +1711,31 @@ def main():
             payload = collect_payload(count_cache)
 
             try:
-                status = post_heartbeat(server_url, api_token, payload)
+                status, response_payload = post_heartbeat(server_url, api_token, payload)
                 log_message(f"Heartbeat sent to {server_url} with status {status}.")
+
+                if not isinstance(response_payload, dict):
+                    response_payload = {}
+
+                requested_drive_values = _split_config_values(
+                    response_payload.get("requested_drive_values", [])
+                )
+
+                for requested_drive_value in requested_drive_values:
+                    count_cache.request_scan_value(requested_drive_value)
+
+                queue_requested_file_downloads(
+                    server_url,
+                    api_token,
+                    count_cache,
+                    response_payload,
+                )
             except (OSError, urllib.error.URLError, urllib.error.HTTPError) as error:
                 log_message(f"Heartbeat failed: {error}")
                 discovered_server_url = discover_dashboard_server(
                     server_url,
                     force_scan=True,
+                    lan_discovery_enabled=lan_discovery_enabled,
                 )
 
                 if discovered_server_url != server_url:

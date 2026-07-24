@@ -35,31 +35,38 @@
                 <span class="nav-text">Dashboard</span>
             </a>
 
-            <a class="nav-link" href="#active-users">
-                <span class="nav-icon">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                </span>
-                <span class="nav-text">Active Users</span>
-            </a>
+            <section class="sidebar-user-panel" aria-label="Active users">
+                <div class="sidebar-user-head">
+                    <span class="nav-icon">
+                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </span>
+                    <span class="nav-text">Active Users</span>
+                    <span class="sidebar-user-count" data-active-agents-online>{{ active_agents_online }}</span>
+                </div>
 
-            <div class="sidebar-agent-list" data-sidebar-agents-list>
-                {% for agent in active_agents %}
-                    <button
-                        type="button"
-                        class="sidebar-agent-button{% if agent.agent_id == selected_agent_id %} selected{% endif %}"
-                        data-agent-id="{{ agent.agent_id }}"
-                        title="{{ agent.ip_address }} | {{ agent.mac_address }}"
-                    >
-                        <span class="sidebar-agent-dot"></span>
-                        <span>{{ agent.host_name }}</span>
-                    </button>
-                {% endfor %}
-            </div>
+                <div class="sidebar-user-list" data-active-agents-list>
+                    {% for agent in active_agents %}
+                        <button
+                            type="button"
+                            class="sidebar-user-button{% if agent.agent_id == selected_agent_id %} selected{% endif %}"
+                            data-agent-id="{{ agent.agent_id }}"
+                            title="{{ agent.ip_address }} | {{ agent.mac_address }}"
+                        >
+                            <span class="sidebar-user-dot"></span>
+                            <span>{{ agent.host_name }}</span>
+                        </button>
+                    {% endfor %}
+                </div>
+
+                <p class="sidebar-users-empty"{% if active_agents %} hidden{% endif %} data-active-agents-empty>
+                    No active users
+                </p>
+            </section>
         </nav>
 
         <div class="sidebar-bottom">
@@ -89,8 +96,8 @@
                         type="text"
                         name="search"
                         value="{{ search_query }}"
-                        placeholder="Search files, folders, devices..."
-                        aria-label="Search files, folders, devices"
+                        placeholder="Search files and folders..."
+                        aria-label="Search files and folders"
                         class="search-input"
                         data-search-input
                     >
@@ -302,70 +309,6 @@
                 </article>
             </section>
 
-            <section class="card active-users-card" id="active-users" aria-label="Active users">
-                <div class="active-users-head">
-                    <div class="panel-title">
-                        <span class="small-mark">
-                            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="9" cy="7" r="4"></circle>
-                                <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                            </svg>
-                        </span>
-                        <h2>Active Users</h2>
-                    </div>
-
-                    <div class="active-user-summary">
-                        <span><span data-active-agents-online>{{ active_agents_online }}</span> online</span>
-                        <span><span data-active-agents-total>{{ active_agents_total }}</span> connected</span>
-                    </div>
-                </div>
-
-                <div class="active-users-list" data-active-agents-list>
-                    {% for agent in active_agents %}
-                        <article
-                            class="active-user-card{% if not agent.is_online %} offline{% endif %}{% if agent.agent_id == selected_agent_id %} selected{% endif %}"
-                            data-agent-id="{{ agent.agent_id }}"
-                            role="button"
-                            tabindex="0"
-                            aria-label="View {{ agent.host_name }} dashboard"
-                        >
-                            <div class="active-user-main">
-                                <span class="active-user-dot"></span>
-                                <div>
-                                    <p class="active-user-name">{{ agent.host_name }}</p>
-                                    <p class="active-user-meta">{{ agent.ip_address }} | {{ agent.mac_address }}</p>
-                                </div>
-                            </div>
-
-                            <div class="active-user-stats">
-                                <span>{{ agent.drive_count }} drives</span>
-                                <span>{{ agent.total_files_display }} files</span>
-                                <span>{{ agent.last_seen_display }}</span>
-                            </div>
-
-                            <div class="active-drive-list">
-                                {% for drive in agent.drives %}
-                                    <span
-                                        class="active-drive-pill"
-                                        title="{{ drive.total_files_display }} files, {{ drive.storage.used_display }} / {{ drive.storage.total_display }} used"
-                                    >
-                                        {{ drive.label }} {{ drive.total_files_display }} files
-                                    </span>
-                                {% empty %}
-                                    <span class="active-drive-pill muted">No drive data</span>
-                                {% endfor %}
-                            </div>
-                        </article>
-                    {% endfor %}
-                </div>
-
-                <p class="active-users-empty"{% if active_agents %} hidden{% endif %} data-active-agents-empty>
-                    Install DriveAgent.exe on a user PC to see it here.
-                </p>
-            </section>
-
             <section class="dashboard-grid">
                 <article class="card file-panel" id="files">
                     <div class="panel-head">
@@ -568,9 +511,7 @@
         const storageFreeElement = document.querySelector("[data-storage-free]");
         const storagePercentElement = document.querySelector("[data-storage-percent]");
         const activeAgentsListElement = document.querySelector("[data-active-agents-list]");
-        const sidebarAgentsListElement = document.querySelector("[data-sidebar-agents-list]");
         const activeAgentsEmptyElement = document.querySelector("[data-active-agents-empty]");
-        const activeAgentsTotalElement = document.querySelector("[data-active-agents-total]");
         const activeAgentsOnlineElement = document.querySelector("[data-active-agents-online]");
         const localDashboardLink = document.querySelector("[data-local-dashboard]");
         const systemHostElement = document.querySelector("[data-system-host]");
@@ -889,28 +830,8 @@
                 }, 0);
             }
 
-            if (activeAgentsTotalElement) {
-                activeAgentsTotalElement.textContent = data.total_agents ?? data.active_agents_total ?? agents.length;
-            }
-
             if (activeAgentsOnlineElement) {
                 activeAgentsOnlineElement.textContent = data.online_agents ?? data.active_agents_online ?? 0;
-            }
-
-            if (sidebarAgentsListElement) {
-                sidebarAgentsListElement.innerHTML = agents.map(function (agent) {
-                    return `
-                        <button
-                            type="button"
-                            class="sidebar-agent-button${agent.agent_id === selectedAgentId ? " selected" : ""}"
-                            data-agent-id="${escapeHtml(agent.agent_id || "")}"
-                            title="${escapeHtml(agent.ip_address || "Unavailable")} | ${escapeHtml(agent.mac_address || "Unavailable")}"
-                        >
-                            <span class="sidebar-agent-dot"></span>
-                            <span>${escapeHtml(agent.host_name || "Unknown PC")}</span>
-                        </button>
-                    `;
-                }).join("");
             }
 
             if (!agents.length) {
@@ -931,46 +852,21 @@
             activeAgentsListElement.hidden = false;
 
             activeAgentsListElement.innerHTML = agents.map(function (agent) {
-                const drives = Array.isArray(agent.drives) && agent.drives.length
-                    ? agent.drives.map(function (drive) {
-                        const storage = drive.storage || {};
-                        const totalFiles = drive.total_files_display || String(drive.total_files || 0);
-                        const countSuffix = drive.count_complete === false ? "+" : "";
-                        const title = `${totalFiles}${countSuffix} files, ${storage.used_display || "Unavailable"} / ${storage.total_display || "Unavailable"} used`;
-                        return `
-                            <span class="active-drive-pill" title="${escapeHtml(title)}">
-                                ${escapeHtml(drive.label || "Drive")} ${escapeHtml(totalFiles)}${countSuffix} files
-                            </span>
-                        `;
-                    }).join("")
-                    : `<span class="active-drive-pill muted">No drive data</span>`;
+                const subtitle = `${agent.drive_count || 0} drives | ${agent.total_files_display || "0"} files`;
 
                 return `
-                    <article
-                        class="active-user-card${agent.is_online ? "" : " offline"}${agent.agent_id === selectedAgentId ? " selected" : ""}"
+                    <button
+                        type="button"
+                        class="sidebar-user-button${agent.agent_id === selectedAgentId ? " selected" : ""}"
                         data-agent-id="${escapeHtml(agent.agent_id || "")}"
-                        role="button"
-                        tabindex="0"
-                        aria-label="View ${escapeHtml(agent.host_name || "DriveAgent user")} dashboard"
+                        title="${escapeHtml(agent.ip_address || "Unavailable")} | ${escapeHtml(agent.mac_address || "Unavailable")}"
                     >
-                        <div class="active-user-main">
-                            <span class="active-user-dot"></span>
-                            <div>
-                                <p class="active-user-name">${escapeHtml(agent.host_name || "Unknown PC")}</p>
-                                <p class="active-user-meta">${escapeHtml(agent.ip_address || "Unavailable")} | ${escapeHtml(agent.mac_address || "Unavailable")}</p>
-                            </div>
-                        </div>
-
-                        <div class="active-user-stats">
-                            <span>${escapeHtml(String(agent.drive_count || 0))} drives</span>
-                            <span>${escapeHtml(agent.total_files_display || "0")} files</span>
-                            <span>${escapeHtml(agent.last_seen_display || "Never")}</span>
-                        </div>
-
-                        <div class="active-drive-list">
-                            ${drives}
-                        </div>
-                    </article>
+                        <span class="sidebar-user-dot"></span>
+                        <span>
+                            <span class="sidebar-user-name">${escapeHtml(agent.host_name || "Unknown PC")}</span>
+                            <span class="sidebar-user-meta">${escapeHtml(subtitle)}</span>
+                        </span>
+                    </button>
                 `;
             }).join("");
         }
@@ -1310,33 +1206,6 @@
 
                 event.preventDefault();
                 selectAgent(card.dataset.agentId || "");
-            });
-        }
-
-        if (sidebarAgentsListElement) {
-            sidebarAgentsListElement.addEventListener("click", function (event) {
-                const button = event.target.closest("[data-agent-id]");
-
-                if (!button) {
-                    return;
-                }
-
-                selectAgent(button.dataset.agentId || "");
-            });
-
-            sidebarAgentsListElement.addEventListener("keydown", function (event) {
-                if (event.key !== "Enter" && event.key !== " ") {
-                    return;
-                }
-
-                const button = event.target.closest("[data-agent-id]");
-
-                if (!button) {
-                    return;
-                }
-
-                event.preventDefault();
-                selectAgent(button.dataset.agentId || "");
             });
         }
 

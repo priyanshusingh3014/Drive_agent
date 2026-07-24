@@ -3,7 +3,23 @@ param(
     [string]$ServerUrl,
 
     [Parameter(Mandatory = $true)]
-    [string]$ApiToken
+    [string]$ApiToken,
+
+    [string]$DrivePriority = "D,C",
+
+    [int]$HeartbeatSeconds = 1,
+
+    [int]$CountRefreshSeconds = 60,
+
+    [int]$FileBatchSize = 250,
+
+    [int]$FirstFileBatchSize = 10,
+
+    [double]$FileBatchIntervalSeconds = 1,
+
+    [int]$ChangeDebounceSeconds = 1,
+
+    [bool]$LanDiscoveryEnabled = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,15 +45,25 @@ if (-not (Test-Path -LiteralPath $PyInstaller)) {
 
 $SafeServerUrl = $ServerUrl.Replace("\", "\\").Replace("'", "\'")
 $SafeApiToken = $ApiToken.Replace("\", "\\").Replace("'", "\'")
+$SafeDrivePriority = $DrivePriority.Replace("\", "\\").Replace("'", "\'")
+$PythonLanDiscoveryEnabled = if ($LanDiscoveryEnabled) { "True" } else { "False" }
 
 Set-Content -Path $DefaultsPath -Encoding UTF8 -Value @"
 DEFAULT_SERVER_URL = '$SafeServerUrl'
 DEFAULT_API_TOKEN = '$SafeApiToken'
+DEFAULT_HEARTBEAT_SECONDS = $HeartbeatSeconds
+DEFAULT_COUNT_REFRESH_SECONDS = $CountRefreshSeconds
+DEFAULT_FILE_BATCH_SIZE = $FileBatchSize
+DEFAULT_CHANGE_DEBOUNCE_SECONDS = $ChangeDebounceSeconds
+DEFAULT_LAN_DISCOVERY_ENABLED = $PythonLanDiscoveryEnabled
+DEFAULT_DRIVE_PRIORITY = '$SafeDrivePriority'
+DEFAULT_FIRST_FILE_BATCH_SIZE = $FirstFileBatchSize
+DEFAULT_FILE_BATCH_INTERVAL_SECONDS = $FileBatchIntervalSeconds
 "@
 
 Push-Location $ProjectRoot
 try {
-    & $PyInstaller --onefile --noconsole --name DriveAgent agent_client.py
+    & $PyInstaller --onefile --name DriveAgent agent_client.py
 
     New-Item -ItemType Directory -Path $DownloadDir -Force | Out-Null
     Copy-Item -LiteralPath $DistExe -Destination $OutputExe -Force
@@ -48,6 +74,10 @@ try {
 
     Write-Host "Created $OutputExe"
     Write-Host "Embedded server URL: $ServerUrl"
+    Write-Host "Embedded drive priority: $DrivePriority"
+    Write-Host "Embedded heartbeat seconds: $HeartbeatSeconds"
+    Write-Host "Embedded file batch size: $FileBatchSize"
+    Write-Host "Embedded LAN discovery enabled: $LanDiscoveryEnabled"
 }
 finally {
     Pop-Location

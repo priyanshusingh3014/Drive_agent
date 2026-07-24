@@ -79,3 +79,49 @@ class ActiveAgentFile(models.Model):
 
     def __str__(self):
         return self.relative_path
+
+
+class RemoteFileDownload(models.Model):
+    STATUS_QUEUED = "queued"
+    STATUS_READY = "ready"
+    STATUS_FAILED = "failed"
+    STATUS_CHOICES = (
+        (STATUS_QUEUED, "Queued"),
+        (STATUS_READY, "Ready"),
+        (STATUS_FAILED, "Failed"),
+    )
+
+    request_id = models.CharField(max_length=64, unique=True)
+    agent = models.ForeignKey(
+        ActiveAgent,
+        on_delete=models.CASCADE,
+        related_name="download_requests",
+    )
+    drive = models.ForeignKey(
+        ActiveAgentDrive,
+        on_delete=models.CASCADE,
+        related_name="download_requests",
+    )
+    relative_path = models.CharField(max_length=2048)
+    name = models.CharField(max_length=255)
+    modified_timestamp = models.FloatField(default=0)
+    status = models.CharField(
+        max_length=16,
+        choices=STATUS_CHOICES,
+        default=STATUS_QUEUED,
+    )
+    file_path = models.CharField(max_length=2048, blank=True)
+    size_bytes = models.PositiveBigIntegerField(default=0)
+    error_message = models.CharField(max_length=512, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = (
+            models.Index(fields=("agent", "drive", "relative_path")),
+            models.Index(fields=("request_id", "status")),
+        )
+        ordering = ("-updated_at",)
+
+    def __str__(self):
+        return f"{self.agent.host_name} {self.relative_path}"

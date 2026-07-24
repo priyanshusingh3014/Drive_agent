@@ -194,26 +194,58 @@
             place-items: center;
         }
 
-        .sidebar-agent-list {
+        .sidebar-user-panel {
             display: grid;
-            gap: 7px;
-            padding: 0 4px 4px 48px;
+            gap: 8px;
+            padding: 9px 10px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(203, 216, 234, 0.78);
+            border-radius: 8px;
         }
 
-        .sidebar-agent-button {
+        .sidebar-user-head {
             display: grid;
-            grid-template-columns: 8px minmax(0, 1fr);
+            grid-template-columns: 28px minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 10px;
+            color: #1c3358;
+            font-size: 14px;
+            font-weight: 900;
+        }
+
+        .sidebar-user-count {
+            display: grid;
+            min-width: 24px;
+            height: 24px;
+            place-items: center;
+            color: #ffffff;
+            background: var(--brand);
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .sidebar-user-list {
+            display: grid;
+            gap: 7px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .sidebar-user-button {
+            display: grid;
+            grid-template-columns: 9px minmax(0, 1fr);
             align-items: center;
             gap: 8px;
-            min-height: 31px;
-            padding: 6px 9px;
+            min-height: 40px;
+            padding: 7px 9px;
             color: #294365;
             text-align: left;
-            background: rgba(255, 255, 255, 0.7);
-            border: 1px solid rgba(203, 216, 234, 0.8);
-            border-radius: 7px;
-            font-size: 12px;
-            font-weight: 700;
+            background: #ffffff;
+            border: 1px solid rgba(203, 216, 234, 0.9);
+            border-radius: 8px;
+            box-shadow: 0 5px 12px rgba(15, 23, 42, 0.04);
             transition:
                 background-color 160ms ease,
                 border-color 160ms ease,
@@ -221,26 +253,50 @@
                 transform 160ms ease;
         }
 
-        .sidebar-agent-button span:last-child {
+        .sidebar-user-button:hover,
+        .sidebar-user-button.selected {
+            color: #064ac2;
+            background: #eaf1ff;
+            border-color: rgba(5, 95, 240, 0.36);
+            transform: translateX(2px);
+        }
+
+        .sidebar-user-dot {
+            width: 9px;
+            height: 9px;
+            background: #19c56f;
+            border-radius: 999px;
+            box-shadow: 0 0 0 3px rgba(25, 197, 111, 0.13);
+        }
+
+        .sidebar-user-name,
+        .sidebar-user-meta {
+            display: block;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
-        .sidebar-agent-button:hover,
-        .sidebar-agent-button.selected {
-            color: #064ac2;
-            background: #eaf1ff;
-            border-color: rgba(5, 95, 240, 0.28);
-            transform: translateX(2px);
+        .sidebar-user-name {
+            font-size: 12px;
+            font-weight: 800;
         }
 
-        .sidebar-agent-dot {
-            width: 8px;
-            height: 8px;
-            background: #19c56f;
-            border-radius: 999px;
-            box-shadow: 0 0 0 3px rgba(25, 197, 111, 0.12);
+        .sidebar-user-meta {
+            margin-top: 2px;
+            color: #667085;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .sidebar-users-empty {
+            padding: 9px;
+            color: #667085;
+            background: rgba(248, 251, 255, 0.8);
+            border: 1px dashed #b8c8dc;
+            border-radius: 8px;
+            font-size: 12px;
+            text-align: center;
         }
 
         .icon {
@@ -661,7 +717,7 @@
             padding: 8px 16px;
             overflow: hidden;
             display: grid;
-            grid-template-rows: auto auto 150px 116px minmax(0, 1fr);
+            grid-template-rows: auto auto 150px minmax(0, 1fr);
             gap: 8px;
         }
 
@@ -951,185 +1007,6 @@
             font-size: 10px;
             font-weight: 700;
             line-height: 1.3;
-        }
-
-        .active-users-card {
-            display: grid;
-            grid-template-rows: auto minmax(0, 1fr);
-            min-height: 0;
-            overflow: hidden;
-            padding: 8px 10px;
-        }
-
-        .active-users-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 8px;
-        }
-
-        .active-user-summary {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #52627b;
-            font-size: 11px;
-            white-space: nowrap;
-        }
-
-        .active-user-summary span {
-            display: inline-flex;
-            align-items: center;
-            min-height: 22px;
-            padding: 2px 8px;
-            background: #f6f9fd;
-            border: 1px solid var(--line);
-            border-radius: 999px;
-        }
-
-        .active-users-list {
-            display: grid;
-            grid-row: 2;
-            grid-auto-flow: column;
-            grid-auto-columns: minmax(250px, 1fr);
-            gap: 8px;
-            min-height: 0;
-            overflow-x: auto;
-            overflow-y: hidden;
-            padding-bottom: 2px;
-        }
-
-        .active-user-card {
-            display: grid;
-            grid-template-rows: auto auto auto;
-            gap: 5px;
-            min-width: 0;
-            padding: 8px;
-            background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
-            border: 1px solid rgba(18, 161, 80, 0.2);
-            border-radius: 8px;
-            cursor: pointer;
-            transition:
-                border-color 160ms ease,
-                box-shadow 160ms ease,
-                transform 160ms ease;
-        }
-
-        .active-user-card:hover,
-        .active-user-card:focus {
-            border-color: rgba(5, 95, 240, 0.48);
-            box-shadow: 0 10px 22px rgba(5, 95, 240, 0.12);
-            outline: 0;
-            transform: translateY(-1px);
-        }
-
-        .active-user-card.selected {
-            background: linear-gradient(135deg, #eef5ff 0%, #edfbf6 100%);
-            border-color: rgba(5, 95, 240, 0.65);
-            box-shadow:
-                inset 3px 0 0 var(--brand),
-                0 12px 24px rgba(5, 95, 240, 0.14);
-        }
-
-        .active-user-card.offline {
-            border-color: var(--line);
-            opacity: 0.72;
-        }
-
-        .active-user-main {
-            display: grid;
-            grid-template-columns: 9px minmax(0, 1fr);
-            align-items: center;
-            gap: 7px;
-            min-width: 0;
-        }
-
-        .active-user-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--green);
-            border-radius: 999px;
-            box-shadow: 0 0 0 4px rgba(18, 161, 80, 0.12);
-        }
-
-        .active-user-card.offline .active-user-dot {
-            background: #98a2b3;
-            box-shadow: none;
-        }
-
-        .active-user-name,
-        .active-user-meta {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .active-user-name {
-            color: #14213d;
-            font-size: 12px;
-        }
-
-        .active-user-meta {
-            margin-top: 2px;
-            color: #667085;
-            font-size: 10px;
-        }
-
-        .active-user-stats {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            color: #40516c;
-            font-size: 10px;
-            white-space: nowrap;
-        }
-
-        .active-drive-list {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            min-width: 0;
-            overflow-x: auto;
-            overflow-y: hidden;
-            scrollbar-width: none;
-        }
-
-        .active-drive-list::-webkit-scrollbar {
-            display: none;
-        }
-
-        .active-drive-pill {
-            display: inline-flex;
-            align-items: center;
-            min-width: 0;
-            max-width: 120px;
-            min-height: 18px;
-            padding: 2px 6px;
-            overflow: hidden;
-            color: var(--brand);
-            background: var(--brand-soft);
-            border-radius: 999px;
-            font-size: 9px;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .active-drive-pill.muted {
-            color: #667085;
-            background: #f2f4f7;
-        }
-
-        .active-users-empty {
-            display: grid;
-            grid-row: 2;
-            min-height: 54px;
-            place-items: center;
-            color: #667085;
-            background: linear-gradient(135deg, #f8fbff 0%, #eef8f5 100%);
-            border: 1px dashed #b8c8dc;
-            border-radius: 8px;
-            font-size: 12px;
         }
 
         .dashboard-grid {
@@ -1697,7 +1574,6 @@
             }
 
             .top-cards,
-            .active-users-card,
             .dashboard-grid {
                 min-height: 0;
             }
@@ -1820,12 +1696,6 @@
                 flex-wrap: wrap;
             }
 
-            .active-users-head,
-            .active-user-summary {
-                align-items: stretch;
-                flex-direction: column;
-            }
-
             h1 {
                 font-size: 24px;
             }
@@ -1847,7 +1717,7 @@
             .sync-badge,
             .metric-number,
             .system-value,
-            .active-user-name,
+            .sidebar-user-name,
             .file-name,
             .file-icon,
             .download-action,
@@ -1867,10 +1737,7 @@
             .metric-small,
             .system-label,
             .system-sub,
-            .active-user-summary,
-            .active-user-meta,
-            .active-user-stats,
-            .active-drive-pill,
+            .sidebar-user-meta,
             .file-count,
             .filter-button,
             .file-folder,
@@ -1901,7 +1768,7 @@
             .sync-row,
             .metric-number,
             .system-value,
-            .active-user-name,
+            .sidebar-user-name,
             .file-name,
             .download-action,
             .page-button.active,

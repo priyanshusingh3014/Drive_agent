@@ -6,9 +6,24 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import ActiveAgent, ActiveAgentDrive, ActiveAgentFile
+from .models import (
+    ActiveAgent,
+    ActiveAgentDrive,
+    ActiveAgentFile,
+    RemoteFileDownload,
+)
 from . import scanner
 from .views import SELECTED_AGENT_SESSION_KEY
+
+
+TEST_STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 
 class ScannerTests(SimpleTestCase):
@@ -305,6 +320,103 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["selected_agent_id"], "")
         self.assertNotIn(SELECTED_AGENT_SESSION_KEY, self.client.session)
 
+    @override_settings(LOCAL_DRIVE_SCANNER_ENABLED=False)
+    def test_hosted_dashboard_waits_for_active_user_when_no_agent_selected(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+
+        self.client.force_login(user)
+        response = self.client.get("/files-data/")
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "")
+        self.assertEqual(data["dashboard"]["sync_status_title"], "Waiting for Active User")
+        self.assertEqual(data["dashboard"]["system_info"]["host_name"], "Select Active User")
+        self.assertEqual(data["pagination"]["total_matching_display"], "0")
+        self.assertIn("Select an Active User", data["error_message"])
+
+    @override_settings(
+        LOCAL_DRIVE_SCANNER_ENABLED=False,
+        AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT=True,
+    )
+    def test_hosted_dashboard_auto_selects_single_installed_agent(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="own-installed-pc",
+            host_name="OWN-PC",
+            ip_address="192.168.1.101",
+            mac_address="AA:11:BB:22:CC:33",
+            drive_count=1,
+            total_files=1,
+            latest_payload={},
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=drive,
+            name="Own_PC_File.txt",
+            folder="D:\\Work",
+            relative_path="Work\\Own_PC_File.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get("/files-data/")
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "own-installed-pc")
+        self.assertEqual(data["dashboard"]["system_info"]["host_name"], "OWN-PC")
+        self.assertIn("Own_PC_File.txt", data["rows_html"])
+        self.assertEqual(
+            self.client.session[SELECTED_AGENT_SESSION_KEY],
+            "own-installed-pc",
+        )
+
+        agent.refresh_from_db()
+        self.assertEqual(agent.latest_payload["requested_drive_values"], ["D:/"])
+
+    @override_settings(
+        LOCAL_DRIVE_SCANNER_ENABLED=False,
+        STORAGES=TEST_STORAGES,
+    )
+    def test_active_users_are_sidebar_only(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        ActiveAgent.objects.create(
+            agent_id="sidebar-user-pc",
+            host_name="SIDEBAR-PC",
+            ip_address="192.168.1.92",
+        )
+
+        self.client.force_login(user)
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="sidebar-user-panel"')
+        self.assertContains(response, "SIDEBAR-PC")
+        self.assertNotContains(response, "active-users-card")
+
     def test_agent_files_batch_stores_remote_files(self):
         response = self.client.post(
             "/agent-files-batch/",
@@ -356,6 +468,112 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(drive.total_files, 1)
         self.assertTrue(drive.count_complete)
         self.assertEqual(file_report.name, "Remote_Report.pdf")
+
+    def test_agent_file_download_upload_stores_requested_file(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as download_root:
+            with override_settings(REMOTE_FILE_DOWNLOAD_ROOT=Path(download_root)):
+                agent = ActiveAgent.objects.create(
+                    agent_id="download-agent",
+                    host_name="DOWNLOAD-PC",
+                    ip_address="192.168.1.82",
+                )
+                drive = ActiveAgentDrive.objects.create(
+                    agent=agent,
+                    label="D:\\",
+                    value="D:/",
+                )
+                download_request = RemoteFileDownload.objects.create(
+                    request_id="download-request-1",
+                    agent=agent,
+                    drive=drive,
+                    relative_path="Reports\\Ready.txt",
+                    name="Ready.txt",
+                )
+
+                response = self.client.post(
+                    "/agent-file-download/",
+                    data=b"remote file bytes",
+                    content_type="application/octet-stream",
+                    HTTP_X_AGENT_TOKEN="test-token",
+                    HTTP_X_AGENT_ID="download-agent",
+                    HTTP_X_DOWNLOAD_REQUEST_ID="download-request-1",
+                    HTTP_X_DOWNLOAD_STATUS="ready",
+                )
+
+                self.assertEqual(response.status_code, 200)
+                download_request.refresh_from_db()
+                self.assertEqual(download_request.status, RemoteFileDownload.STATUS_READY)
+                self.assertEqual(download_request.size_bytes, len(b"remote file bytes"))
+                self.assertEqual(
+                    Path(download_request.file_path).read_bytes(),
+                    b"remote file bytes",
+                )
+
+    def test_dashboard_serves_ready_remote_file_download(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as download_root:
+            ready_file_path = Path(download_root) / "ready.download"
+            ready_file_path.write_bytes(b"ready remote content")
+            agent = ActiveAgent.objects.create(
+                agent_id="ready-download-agent",
+                host_name="READY-PC",
+                ip_address="192.168.1.83",
+            )
+            drive = ActiveAgentDrive.objects.create(
+                agent=agent,
+                label="D:\\",
+                value="D:/",
+            )
+            file_report = ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name="Ready_Remote.txt",
+                folder="D:\\Reports",
+                relative_path="Reports\\Ready_Remote.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="20 bytes",
+                size_bytes=20,
+                modified_timestamp=3000,
+            )
+            RemoteFileDownload.objects.create(
+                request_id="ready-request-1",
+                agent=agent,
+                drive=drive,
+                relative_path=file_report.relative_path,
+                name=file_report.name,
+                modified_timestamp=file_report.modified_timestamp,
+                status=RemoteFileDownload.STATUS_READY,
+                file_path=str(ready_file_path),
+                size_bytes=ready_file_path.stat().st_size,
+            )
+
+            self.client.force_login(user)
+            select_response = self.client.post(
+                "/select-agent/",
+                data={"agent_id": agent.agent_id},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(select_response.status_code, 200)
+
+            response = self.client.get(
+                "/download/",
+                data={"path": file_report.relative_path},
+            )
+            self.assertEqual(response.status_code, 200)
+            downloaded_content = b"".join(response.streaming_content)
+
+            self.assertEqual(downloaded_content, b"ready remote content")
+            self.assertEqual(
+                response.headers["Content-Disposition"],
+                'attachment; filename="Ready_Remote.txt"',
+            )
 
     def test_agent_uninstall_removes_active_agent(self):
         agent = ActiveAgent.objects.create(
@@ -464,4 +682,148 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["selected_agent_id"], "remote-pc-2")
         self.assertEqual(data["dashboard"]["system_info"]["host_name"], "DESIGN-PC")
         self.assertIn("Design_Board.png", data["rows_html"])
-        self.assertIn("Remote", data["rows_html"])
+        self.assertIn("Download", data["rows_html"])
+
+    def test_selecting_active_agent_prefers_d_drive(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-d-default",
+            host_name="D-DEFAULT-PC",
+            ip_address="192.168.1.91",
+            mac_address="11:22:33:44:55:77",
+            drive_count=2,
+            total_files=2,
+        )
+        c_drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="C:\\",
+            value="C:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+        d_drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=c_drive,
+            name="C_File.txt",
+            folder="C:\\Temp",
+            relative_path="Temp\\C_File.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=d_drive,
+            name="D_File.txt",
+            folder="D:\\Work",
+            relative_path="Work\\D_File.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="2 KB",
+            size_bytes=2048,
+        )
+
+        self.client.force_login(user)
+        response = self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-d-default"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_drive_value"], "D:/")
+        self.assertEqual(
+            [option["value"] for option in data["drive_options"]],
+            ["D:/", "C:/"],
+        )
+        self.assertEqual(data["dashboard"]["drive_label"], "D:\\")
+        self.assertIn("D_File.txt", data["rows_html"])
+        self.assertNotIn("C_File.txt", data["rows_html"])
+
+    def test_selecting_remote_drive_queues_priority_scan_for_agent(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-priority-scan",
+            host_name="PRIORITY-PC",
+            ip_address="192.168.1.95",
+            mac_address="11:22:33:44:55:88",
+            drive_count=2,
+            total_files=0,
+            latest_payload={},
+        )
+        ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+        )
+        ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="C:\\",
+            value="C:/",
+        )
+
+        self.client.force_login(user)
+        select_agent_response = self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-priority-scan"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(select_agent_response.status_code, 200)
+
+        select_drive_response = self.client.post(
+            "/select-drive/",
+            data={"drive_root": "C:/"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(select_drive_response.status_code, 200)
+
+        agent.refresh_from_db()
+        self.assertEqual(agent.latest_payload["requested_drive_values"], ["C:/"])
+
+        heartbeat_response = self.client.post(
+            "/agent-heartbeat/",
+            data={
+                "agent_id": "remote-pc-priority-scan",
+                "host_name": "PRIORITY-PC",
+                "drives": [
+                    {
+                        "label": "D:\\",
+                        "value": "D:/",
+                    },
+                    {
+                        "label": "C:\\",
+                        "value": "C:/",
+                    },
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+        heartbeat_data = heartbeat_response.json()
+
+        self.assertEqual(heartbeat_response.status_code, 200)
+        self.assertEqual(heartbeat_data["requested_drive_values"], ["C:/"])
+
+        agent.refresh_from_db()
+        self.assertEqual(agent.latest_payload["requested_drive_values"], [])

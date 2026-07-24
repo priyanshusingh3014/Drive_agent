@@ -12,6 +12,7 @@ runserver.err
 *.zip
 agent_build_defaults.py
 agent_download/
+remote_downloads/
 build/
 dist/
 *.spec
