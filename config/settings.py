@@ -12,7 +12,13 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 import secrets
+from importlib.util import find_spec
 from pathlib import Path
+
+try:
+    import dj_database_url
+except ImportError:
+    dj_database_url = None
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,20 +27,58 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-qd(_mh9#&$bjhz$1qo6@=tj!2pvlh)%chh*=ogig=!!zo@3o)@'
+def _env_bool(name, default=False):
+    value = os.environ.get(name)
+
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+# SECURITY WARNING: keep the secret key used in production secret.
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    os.environ.get(
+        "SECRET_KEY",
+        "django-insecure-qd(_mh9#&$bjhz$1qo6@=tj!2pvlh)%chh*=ogig=!!zo@3o)@",
+    ),
+)
+
+RUNNING_ON_RENDER = bool(os.environ.get("RENDER"))
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool("DJANGO_DEBUG", default=not RUNNING_ON_RENDER)
+
+_default_allowed_hosts = ["127.0.0.1", "localhost"]
+
+if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+    _default_allowed_hosts.append(os.environ["RENDER_EXTERNAL_HOSTNAME"])
+
+if DEBUG:
+    _default_allowed_hosts.append("*")
 
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,*").split(",")
+    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", ",".join(_default_allowed_hosts)).split(",")
     if host.strip()
+]
+
+_default_csrf_origins = []
+
+if os.environ.get("RENDER_EXTERNAL_HOSTNAME"):
+    _default_csrf_origins.append(f"https://{os.environ['RENDER_EXTERNAL_HOSTNAME']}")
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", ",".join(_default_csrf_origins)).split(",")
+    if origin.strip()
 ]
 
 
 # Application definition
+
+HAS_WHITENOISE = find_spec("whitenoise") is not None
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -55,6 +99,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if HAS_WHITENOISE:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 
 ROOT_URLCONF = 'config.urls'
 
@@ -79,15 +126,25 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-        'OPTIONS': {
-            'timeout': 30,
-        },
+SQLITE_DATABASE_URL = f"sqlite:///{(BASE_DIR / 'db.sqlite3').as_posix()}"
+
+if dj_database_url is not None:
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=SQLITE_DATABASE_URL,
+            conn_max_age=600,
+        )
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+
+if DATABASES["default"]["ENGINE"] == "django.db.backends.sqlite3":
+    DATABASES["default"].setdefault("OPTIONS", {})["timeout"] = 30
 
 
 # Password validation
@@ -124,7 +181,32 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if HAS_WHITENOISE
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        ),
+    },
+}
+WHITENOISE_USE_FINDERS = DEBUG
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = _env_bool("DJANGO_SECURE_SSL_REDIRECT", default=False)
+SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_SECURE_HSTS_SECONDS", "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool(
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS",
+    default=False,
+)
+SECURE_HSTS_PRELOAD = _env_bool("DJANGO_SECURE_HSTS_PRELOAD", default=False)
+SESSION_COOKIE_SECURE = _env_bool("DJANGO_SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = _env_bool("DJANGO_CSRF_COOKIE_SECURE", default=not DEBUG)
 
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "drive_files"

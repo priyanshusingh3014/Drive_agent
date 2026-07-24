@@ -11,6 +11,11 @@ Agent/
 |-- manage.py
 |-- requirements.txt
 |-- README.md
+|-- Procfile
+|-- build.sh
+|-- render.yaml
+|-- runtime.txt
+|-- .python-version
 |-- agent_client.py
 |-- agent_config.example.json
 |-- config/
@@ -73,10 +78,12 @@ The frontend uses Django templates and external CSS only.
 
 `config/settings.py`
 - Django settings.
-- Uses SQLite with a timeout to reduce temporary `database is locked` errors.
+- Uses SQLite locally by default, and switches to PostgreSQL automatically when `DATABASE_URL` is set.
+- Defines `STATIC_ROOT` for deployment static collection.
+- Uses WhiteNoise for static serving when it is installed on the deployment server.
 - Uses signed-cookie sessions.
 - Uses a randomized session cookie name so users must log in again after each server restart.
-- Reads `DRIVE_AGENT_API_TOKEN`, `DRIVE_AGENT_ONLINE_SECONDS`, and `DJANGO_ALLOWED_HOSTS` from environment variables.
+- Reads deployment and agent settings from environment variables.
 
 `drivefiles/models.py`
 - `ActiveAgent`: stores every authorized PC that runs the agent executable and reports to the admin dashboard.
@@ -190,6 +197,104 @@ Open:
 ```text
 http://127.0.0.1:8000/
 ```
+
+## Deploy Admin Dashboard
+
+The project now includes these deployment files:
+
+```text
+Procfile
+runtime.txt
+.python-version
+build.sh
+render.yaml
+.gitignore
+```
+
+### Render Blueprint Deployment
+
+The fastest Render setup is to use the included `render.yaml`.
+
+1. Push this project to GitHub.
+2. In Render, open **Blueprints**.
+3. Create a new Blueprint from this repository.
+4. Render will create:
+   - `drive-agent-dashboard` web service
+   - `drive-agent-db` PostgreSQL database
+5. Wait for the deploy to finish.
+6. Open the generated `.onrender.com` dashboard URL.
+
+The Blueprint uses:
+
+```text
+Build Command: bash build.sh
+Start Command: python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+Health Check Path: /agent-ping/
+Python Version: 3.12.13
+```
+
+### Render Manual Deployment
+
+If you create the services manually:
+
+1. Create a Render PostgreSQL database first.
+2. Create a Render Web Service from this repository.
+3. Set Runtime/Language to Python.
+4. Set Build Command:
+
+```bash
+bash build.sh
+```
+
+5. Set Start Command:
+
+```bash
+python -m gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+```
+
+6. Set Health Check Path:
+
+```text
+/agent-ping/
+```
+
+Use these environment variables on the hosting platform:
+
+```text
+DJANGO_SECRET_KEY=<long-random-secret>
+DJANGO_DEBUG=False
+DJANGO_ALLOWED_HOSTS=<your-dashboard-domain>
+DJANGO_CSRF_TRUSTED_ORIGINS=https://<your-dashboard-domain>
+DJANGO_SECURE_SSL_REDIRECT=True
+DJANGO_SECURE_HSTS_SECONDS=31536000
+DRIVE_AGENT_API_TOKEN=<same-secret-token-used-by-the-exe>
+DATABASE_URL=<postgres-database-url>
+```
+
+On Render, use the PostgreSQL **internal database URL** for `DATABASE_URL` when the web service and database are in the same Render region.
+
+Render also provides `RENDER_EXTERNAL_HOSTNAME` automatically. The project uses it for `ALLOWED_HOSTS` and CSRF trusted origin defaults, but set `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` manually if you add a custom domain.
+
+Free Render services are useful for testing, but they are not ideal for the final agent dashboard. Free web services can spin down when idle, and free PostgreSQL databases have temporary/limited behavior. For a real dashboard receiving heartbeats and file metadata from installed EXE agents, use a paid web service and paid PostgreSQL database.
+
+Render Blueprint defaults in this repo are free so testing is easy. For production, change these in `render.yaml`:
+
+```text
+services[0].plan: starter
+databases[0].plan: basic-256mb
+```
+
+The app should not use `db.sqlite3` on Render. Render web services have an ephemeral filesystem, so SQLite data can disappear after restart, spin-down, or redeploy.
+
+After deploying, rebuild `DriveAgent.exe` with the public dashboard endpoint:
+
+```text
+https://<your-render-service>.onrender.com/agent-heartbeat/
+```
+
+SQLite is fine for local testing, but it is not recommended for the online admin dashboard. The DriveAgent EXE can send frequent heartbeats and file batches from multiple PCs, and SQLite can raise `database is locked` under that write load. Many hosting platforms also use temporary filesystems, so a deployed `db.sqlite3` may disappear after restart or redeploy. Use PostgreSQL on the hosted dashboard by setting `DATABASE_URL`.
+
+The old local endpoint, such as `http://192.168.x.x:8000/agent-heartbeat/`, only works on the same LAN and will not work through the internet.
 
 For user PCs on the same network to report to this admin dashboard, run the server on the network:
 
@@ -342,8 +447,12 @@ After receiving the ZIP on another PC, create a fresh virtual environment and in
 ## Requirements
 
 ```text
-Django==6.0.7
 asgiref==3.12.1
+Django==6.0.7
+dj-database-url>=2.2,<4
+gunicorn>=23,<24
+psycopg[binary]>=3.2,<4
 sqlparse==0.5.5
 tzdata==2026.3
+whitenoise>=6.7,<7
 ```
