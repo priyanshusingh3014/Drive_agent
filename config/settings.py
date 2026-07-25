@@ -15,6 +15,8 @@ import secrets
 from importlib.util import find_spec
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 try:
     import dj_database_url
 except ImportError:
@@ -131,11 +133,18 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 SQLITE_DATABASE_URL = f"sqlite:///{(BASE_DIR / 'db.sqlite3').as_posix()}"
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+if RUNNING_ON_RENDER and not DATABASE_URL:
+    raise ImproperlyConfigured(
+        "DATABASE_URL is required on Render so users, passwords, and agent data "
+        "are stored permanently in PostgreSQL instead of temporary SQLite."
+    )
 
 if dj_database_url is not None:
     DATABASES = {
         "default": dj_database_url.config(
-            default=SQLITE_DATABASE_URL,
+            default=DATABASE_URL or SQLITE_DATABASE_URL,
             conn_max_age=600,
         )
     }

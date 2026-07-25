@@ -292,7 +292,9 @@ WEB_CONCURRENCY=1
 DATABASE_URL=<postgres-database-url>
 ```
 
-On Render, use the PostgreSQL **internal database URL** for `DATABASE_URL` when the web service and database are in the same Render region.
+On Render, use the PostgreSQL **internal database URL** for `DATABASE_URL` when the web service and database are in the same Render region. This is required for permanent usernames/passwords and agent data. The app now refuses to start on Render without `DATABASE_URL` so it cannot silently fall back to temporary SQLite.
+
+Signup users are stored in the database, not in the browser session. After a server restart, the project intentionally asks the admin to log in again, but the same username/password should still work. If you are forced to create a new username after each redeploy or restart, Render is not connected to the persistent PostgreSQL database.
 
 Render also provides `RENDER_EXTERNAL_HOSTNAME` automatically. The project uses it for `ALLOWED_HOSTS` and CSRF trusted origin defaults, but set `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS` manually if you add a custom domain.
 
@@ -305,7 +307,7 @@ services[0].plan: starter
 databases[0].plan: basic-256mb
 ```
 
-The app should not use `db.sqlite3` on Render. Render web services have an ephemeral filesystem, so SQLite data can disappear after restart, spin-down, or redeploy.
+The app should not use `db.sqlite3` on Render. Render web services have an ephemeral filesystem, so SQLite data can disappear after restart, spin-down, or redeploy. When `DATABASE_URL` is configured correctly, creating the username once is enough; future logins should use the same account.
 
 After deploying, rebuild `DriveAgent.exe` with the public dashboard endpoint:
 
