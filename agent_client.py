@@ -27,6 +27,7 @@ CHANGE_DEBOUNCE_SECONDS_ENV = "DRIVE_AGENT_CHANGE_DEBOUNCE_SECONDS"
 FIRST_FILE_BATCH_SIZE_ENV = "DRIVE_AGENT_FIRST_FILE_BATCH_SIZE"
 FILE_BATCH_INTERVAL_SECONDS_ENV = "DRIVE_AGENT_FILE_BATCH_INTERVAL_SECONDS"
 DRIVE_PRIORITY_ENV = "DRIVE_AGENT_DRIVE_PRIORITY"
+SYSTEM_DRIVE_DELAY_SECONDS_ENV = "DRIVE_AGENT_SYSTEM_DRIVE_DELAY_SECONDS"
 PRIORITY_FOLDERS_ENV = "DRIVE_AGENT_PRIORITY_FOLDERS"
 LOG_FILE_ENV = "DRIVE_AGENT_LOG_FILE"
 LAN_DISCOVERY_ENABLED_ENV = "DRIVE_AGENT_LAN_DISCOVERY_ENABLED"
@@ -38,8 +39,9 @@ FALLBACK_LAN_DISCOVERY_ENABLED = False
 DEFAULT_DISCOVERY_PORT = 8000
 LOCAL_DEFAULT_SERVER_URL = "http://127.0.0.1:8000/agent-heartbeat/"
 FALLBACK_DRIVE_PRIORITY = "D"
-FALLBACK_FIRST_FILE_BATCH_SIZE = 5
-FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 0.25
+FALLBACK_FIRST_FILE_BATCH_SIZE = 10
+FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 0.15
+FALLBACK_SYSTEM_DRIVE_DELAY_SECONDS = 1
 APP_DIRECTORY_NAME = "DriveAgent"
 RUN_REGISTRY_NAME = "DriveAgent"
 EXCLUDED_FOLDER_NAMES = {
@@ -95,6 +97,11 @@ BUILD_DEFAULT_FILE_BATCH_INTERVAL_SECONDS = getattr(
     "DEFAULT_FILE_BATCH_INTERVAL_SECONDS",
     FALLBACK_FILE_BATCH_INTERVAL_SECONDS,
 )
+BUILD_DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS = getattr(
+    build_defaults,
+    "DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS",
+    FALLBACK_SYSTEM_DRIVE_DELAY_SECONDS,
+)
 
 DEFAULT_SERVER_URL = BUILD_DEFAULT_SERVER_URL
 DEFAULT_API_TOKEN = BUILD_DEFAULT_API_TOKEN
@@ -126,6 +133,7 @@ DEFAULT_LAN_DISCOVERY_ENABLED = getattr(
 DEFAULT_DRIVE_PRIORITY = BUILD_DEFAULT_DRIVE_PRIORITY
 DEFAULT_FIRST_FILE_BATCH_SIZE = BUILD_DEFAULT_FIRST_FILE_BATCH_SIZE
 DEFAULT_FILE_BATCH_INTERVAL_SECONDS = BUILD_DEFAULT_FILE_BATCH_INTERVAL_SECONDS
+DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS = BUILD_DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS
 
 
 def _runtime_directory():
@@ -920,6 +928,7 @@ class FileCountCache:
         batch_size,
         first_batch_size,
         batch_interval_seconds,
+        system_drive_delay_seconds,
         drive_priority,
         priority_folder_names,
     ):
@@ -930,6 +939,7 @@ class FileCountCache:
         self.batch_size = batch_size
         self.first_batch_size = first_batch_size
         self.batch_interval_seconds = batch_interval_seconds
+        self.system_drive_delay_seconds = system_drive_delay_seconds
         self.drive_priority = drive_priority
         self.priority_folder_names = priority_folder_names
         self.identity = machine_identity()
@@ -1051,7 +1061,7 @@ class FileCountCache:
         for root in non_system_roots:
             self._start_initial_scan_for_root(root)
 
-        system_delay = 3 if non_system_roots else 0
+        system_delay = self.system_drive_delay_seconds if non_system_roots else 0
 
         for root in system_roots:
             self._start_delayed_initial_scan(root, system_delay)
@@ -1644,6 +1654,7 @@ def build_parser():
     parser.add_argument("--file-batch-size", type=int, help="Files sent in each metadata batch.")
     parser.add_argument("--first-file-batch-size", type=int, help="Files sent before the first partial metadata report.")
     parser.add_argument("--file-batch-interval-seconds", type=float, help="Maximum seconds to wait before sending a partial metadata report.")
+    parser.add_argument("--system-drive-delay-seconds", type=float, help="Seconds to wait before starting the Windows system drive after other drives.")
     parser.add_argument("--change-debounce-seconds", type=int, help="Seconds to wait after file changes before rescanning a drive.")
     parser.add_argument("--drive-priority", help="Comma-separated drive priority, for example D,C,E.")
     parser.add_argument("--priority-folders", help="Comma-separated folder names to scan early on large drives.")
@@ -1758,6 +1769,16 @@ def main():
         ),
         DEFAULT_FILE_BATCH_INTERVAL_SECONDS,
     )
+    system_drive_delay_seconds = _positive_float(
+        args.system_drive_delay_seconds
+        or _config_value(
+            config,
+            "system_drive_delay_seconds",
+            SYSTEM_DRIVE_DELAY_SECONDS_ENV,
+            DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS,
+        ),
+        DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS,
+    )
     change_debounce_seconds = _positive_int(
         args.change_debounce_seconds
         or _config_value(
@@ -1794,6 +1815,7 @@ def main():
         file_batch_size,
         first_file_batch_size,
         file_batch_interval_seconds,
+        system_drive_delay_seconds,
         drive_priority,
         priority_folder_names,
     )

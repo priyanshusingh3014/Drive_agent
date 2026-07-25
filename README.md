@@ -183,8 +183,9 @@ Example `agent_config.json`:
   "heartbeat_seconds": 1,
   "count_refresh_seconds": 60,
   "file_batch_size": 250,
-  "first_file_batch_size": 5,
-  "file_batch_interval_seconds": 0.25,
+  "first_file_batch_size": 10,
+  "file_batch_interval_seconds": 0.15,
+  "system_drive_delay_seconds": 1,
   "change_debounce_seconds": 1,
   "lan_discovery_enabled": false,
   "drive_priority": "D",
@@ -285,7 +286,7 @@ DJANGO_SECURE_SSL_REDIRECT=True
 DJANGO_SECURE_HSTS_SECONDS=31536000
 DRIVE_AGENT_API_TOKEN=<same-secret-token-used-by-the-exe>
 DRIVE_AGENT_ENABLE_LOCAL_SCANNER=False
-DRIVE_AGENT_ONLINE_SECONDS=90
+DRIVE_AGENT_ONLINE_SECONDS=15
 DRIVE_AGENT_DEFAULT_DRIVE=D:/
 DRIVE_AGENT_DRIVE_PRIORITY=D
 DRIVE_AGENT_FILE_BATCH_SIZE=250
@@ -355,7 +356,7 @@ $env:DRIVE_AGENT_API_TOKEN = "change-this-token"
 python agent_client.py
 ```
 
-After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D`, so `D:/` is preferred when available, other non-system drives follow, and the Windows system drive such as `C:/` stays last. If the admin selects `C:/`, the dashboard queues that drive immediately and its file rows/counts keep increasing while the full scan continues. For large drives, the first batch is sent after the configured first-batch size, defaulting to 5 files, or after the configured interval, defaulting to about 0.25 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
+After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D`, so `D:/` is preferred when available, other non-system drives follow, and the Windows system drive such as `C:/` stays last. If the admin selects `C:/`, the dashboard queues that drive immediately and its file rows/counts keep increasing while the full scan continues. For large drives, the first batch is sent after the configured first-batch size, defaulting to 10 files, or after the configured interval, defaulting to about 0.15 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
 
 When the admin clicks Download for a remote file, the dashboard queues that exact file for the selected agent. On the next heartbeat, the EXE reads the file from the selected drive, uploads it to the dashboard through `/agent-file-download/`, and the browser receives a normal file download. Temporary remote-download files are stored under `remote_downloads/` by default and are ignored by Git.
 
@@ -377,8 +378,9 @@ After the dashboard is deployed, build the one-file user executable with the pub
     -CountRefreshSeconds 60 `
     -FileBatchSize 250 `
     -DrivePriority "D" `
-    -FirstFileBatchSize 5 `
-    -FileBatchIntervalSeconds 0.25 `
+    -FirstFileBatchSize 10 `
+    -FileBatchIntervalSeconds 0.15 `
+    -SystemDriveDelaySeconds 1 `
     -ChangeDebounceSeconds 1 `
     -LanDiscoveryEnabled $false
 ```
@@ -463,7 +465,7 @@ $env:DRIVE_AGENT_ROOT = "E:/"
 - Reported PC default drive follows the configured drive priority.
 - Select a reported drive for the selected Active User and the file table, storage card, file type distribution, totals, and host/IP/MAC area update to that PC.
 - User agents send heartbeats every 1 second by default, watch Windows drive changes, and report changed drive data after additions, edits, and deletions.
-- Agents remain listed under Active Users until uninstall removes them. They are marked offline after the configured heartbeat window, defaulting to 90 seconds.
+- Agents remain listed under Active Users until uninstall removes them. They are marked offline after the configured heartbeat window, defaulting to 15 seconds.
 - User agents scan drives in the configured priority order, and selected remote drives are requested through heartbeat so the first batch appears quickly while the remaining drive data streams.
 - Uninstalling the DriveAgent user package removes that PC from Active Users.
 - Agent heartbeat API protected by a shared token.

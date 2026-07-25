@@ -13,9 +13,11 @@ param(
 
     [int]$FileBatchSize = 250,
 
-    [int]$FirstFileBatchSize = 5,
+    [int]$FirstFileBatchSize = 10,
 
-    [double]$FileBatchIntervalSeconds = 0.25,
+    [double]$FileBatchIntervalSeconds = 0.15,
+
+    [double]$SystemDriveDelaySeconds = 1,
 
     [int]$ChangeDebounceSeconds = 1,
 
@@ -118,6 +120,7 @@ DEFAULT_LAN_DISCOVERY_ENABLED = $PythonLanDiscoveryEnabled
 DEFAULT_DRIVE_PRIORITY = '$SafeDrivePriority'
 DEFAULT_FIRST_FILE_BATCH_SIZE = $FirstFileBatchSize
 DEFAULT_FILE_BATCH_INTERVAL_SECONDS = $FileBatchIntervalSeconds
+DEFAULT_SYSTEM_DRIVE_DELAY_SECONDS = $SystemDriveDelaySeconds
 "@
 
 Push-Location $ProjectRoot
@@ -136,6 +139,9 @@ try {
     Write-Host "Embedded drive priority: $DrivePriority"
     Write-Host "Embedded heartbeat seconds: $HeartbeatSeconds"
     Write-Host "Embedded file batch size: $FileBatchSize"
+    Write-Host "Embedded first file batch size: $FirstFileBatchSize"
+    Write-Host "Embedded file batch interval seconds: $FileBatchIntervalSeconds"
+    Write-Host "Embedded system drive delay seconds: $SystemDriveDelaySeconds"
     Write-Host "Embedded LAN discovery enabled: $LanDiscoveryEnabled"
 }
 finally {
