@@ -8,6 +8,6 @@
   "file_batch_interval_seconds": 0.25,
   "change_debounce_seconds": 1,
   "lan_discovery_enabled": false,
-  "drive_priority": "D,C",
+  "drive_priority": "D",
   "priority_folders": "Users,Desktop,Documents,Downloads,OneDrive,Pictures"
 }

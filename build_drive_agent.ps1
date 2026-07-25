@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ApiToken,
 
-    [string]$DrivePriority = "D,C",
+    [string]$DrivePriority = "D",
 
     [int]$HeartbeatSeconds = 1,
 

@@ -7,7 +7,7 @@ DRIVE_AGENT_ROOT_ENV = "DRIVE_AGENT_ROOT"
 DEFAULT_DRIVE_ROOT_ENV = "DRIVE_AGENT_DEFAULT_DRIVE"
 DRIVE_PRIORITY_ENV = "DRIVE_AGENT_DRIVE_PRIORITY"
 DEFAULT_DRIVE_ROOT = os.environ.get(DEFAULT_DRIVE_ROOT_ENV, "D:/").strip() or "D:/"
-DEFAULT_DRIVE_PRIORITY = os.environ.get(DRIVE_PRIORITY_ENV, "D,C").strip() or "D,C"
+DEFAULT_DRIVE_PRIORITY = os.environ.get(DRIVE_PRIORITY_ENV, "D").strip() or "D"
 
 
 def _fallback_drive_root():
@@ -44,6 +44,10 @@ def _drive_letter(value):
     return ""
 
 
+def _system_drive_letter():
+    return _drive_letter(os.environ.get("SystemDrive") or "C:")
+
+
 def get_preferred_drive_letters():
     letters = []
     seen_letters = set()
@@ -65,6 +69,7 @@ def get_preferred_drive_letters():
 
 def drive_sort_key_for_value(value):
     letter = _drive_letter(value)
+    system_drive_last_index = 1 if letter and letter == _system_drive_letter() else 0
     preferred_letters = get_preferred_drive_letters()
     preferred_index = (
         preferred_letters.index(letter)
@@ -72,7 +77,7 @@ def drive_sort_key_for_value(value):
         else len(preferred_letters)
     )
 
-    return (preferred_index, str(value).lower())
+    return (system_drive_last_index, preferred_index, str(value).lower())
 
 
 def _drive_sort_key(path):

@@ -37,7 +37,7 @@ FALLBACK_CHANGE_DEBOUNCE_SECONDS = 1
 FALLBACK_LAN_DISCOVERY_ENABLED = False
 DEFAULT_DISCOVERY_PORT = 8000
 LOCAL_DEFAULT_SERVER_URL = "http://127.0.0.1:8000/agent-heartbeat/"
-FALLBACK_DRIVE_PRIORITY = "D,C"
+FALLBACK_DRIVE_PRIORITY = "D"
 FALLBACK_FIRST_FILE_BATCH_SIZE = 5
 FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 0.25
 APP_DIRECTORY_NAME = "DriveAgent"
@@ -507,6 +507,10 @@ def _drive_letter(value):
     return ""
 
 
+def _system_drive_letter():
+    return _drive_letter(os.environ.get("SystemDrive") or "C:")
+
+
 def _drive_priority_letters(value, default_value=FALLBACK_DRIVE_PRIORITY):
     letters = []
     seen_letters = set()
@@ -564,13 +568,14 @@ def discover_drive_roots():
 
 def _drive_sort_key(root, drive_priority):
     letter = _drive_letter(root)
+    system_drive_last_index = 1 if letter and letter == _system_drive_letter() else 0
     preferred_index = (
         drive_priority.index(letter)
         if letter in drive_priority
         else len(drive_priority)
     )
 
-    return (preferred_index, str(root).lower())
+    return (system_drive_last_index, preferred_index, str(root).lower())
 
 
 def ordered_drive_roots(drive_priority=()):
@@ -1003,10 +1008,58 @@ class FileCountCache:
         )
         scan_thread.start()
 
+    def _start_initial_scan_for_root(self, root):
+        if self._stop_event.is_set():
+            return
+
+        root_value = drive_value(root)
+
+        with self._lock:
+            scan_snapshot = self._counts.get(root_value)
+
+            if root_value in self._active_scan_values:
+                return
+
+            if scan_snapshot and (
+                scan_snapshot.get("indexed_files")
+                or scan_snapshot.get("count_complete")
+            ):
+                return
+
+        self._start_priority_scan(root)
+        log_message(f"Started immediate scan for {drive_label(root)}.")
+
+    def _start_delayed_initial_scan(self, root, delay_seconds):
+        timer = threading.Timer(
+            delay_seconds,
+            self._start_initial_scan_for_root,
+            args=(root,),
+        )
+        timer.daemon = True
+        timer.start()
+
     def _start_initial_drive_scans(self):
-        for root in ordered_drive_roots(self.drive_priority):
-            self._start_priority_scan(root)
-            log_message(f"Started immediate scan for {drive_label(root)}.")
+        roots = ordered_drive_roots(self.drive_priority)
+        system_letter = _system_drive_letter()
+        non_system_roots = [
+            root for root in roots if _drive_letter(root) != system_letter
+        ]
+        system_roots = [
+            root for root in roots if _drive_letter(root) == system_letter
+        ]
+
+        for root in non_system_roots:
+            self._start_initial_scan_for_root(root)
+
+        system_delay = 3 if non_system_roots else 0
+
+        for root in system_roots:
+            self._start_delayed_initial_scan(root, system_delay)
+
+            if system_delay:
+                log_message(
+                    f"Scheduled {drive_label(root)} scan after other drives start."
+                )
 
     def snapshot(self, value):
         with self._lock:

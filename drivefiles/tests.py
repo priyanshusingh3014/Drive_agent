@@ -718,6 +718,14 @@ class ActiveAgentHeartbeatTests(TestCase):
             indexed_files=1,
             count_complete=True,
         )
+        ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="E:\\",
+            value="E:/",
+            total_files=0,
+            indexed_files=0,
+            count_complete=False,
+        )
         ActiveAgentFile.objects.create(
             agent=agent,
             drive=c_drive,
@@ -757,7 +765,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["selected_drive_value"], "D:/")
         self.assertEqual(
             [option["value"] for option in data["drive_options"]],
-            ["D:/", "C:/"],
+            ["D:/", "E:/", "C:/"],
         )
         self.assertEqual(data["dashboard"]["drive_label"], "D:\\")
         self.assertIn("D_File.txt", data["rows_html"])

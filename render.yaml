@@ -22,7 +22,7 @@ services:
       - key: DRIVE_AGENT_DEFAULT_DRIVE
         value: "D:/"
       - key: DRIVE_AGENT_DRIVE_PRIORITY
-        value: "D,C"
+        value: "D"
       - key: DRIVE_AGENT_FILE_BATCH_SIZE
         value: "250"
       - key: DRIVE_AGENT_FILE_DOWNLOAD_WAIT_SECONDS

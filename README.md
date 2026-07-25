@@ -2,7 +2,7 @@
 
 A Django admin dashboard for monitoring drive files on the server PC and seeing active user PCs that run the lightweight Drive Agent executable.
 
-The dashboard uses configurable drive defaults. Out of the box it prefers `D:/` and scans it before larger drives such as `C:/`, but you can change that through environment variables, `agent_config.json`, or EXE build parameters. The `Select Drive` control lists available drives for the current data source. The new `Active Users` section is populated by remote user PCs that run `agent_client.py` or its packaged `.exe` and send heartbeat reports to the admin server.
+The dashboard uses configurable drive defaults. Out of the box it prefers `D:/`, lists every available drive immediately, scans non-system drives first, and keeps the Windows system drive such as `C:/` last unless the admin selects it. The `Select Drive` control lists available drives for the current data source. The new `Active Users` section is populated by remote user PCs that run `agent_client.py` or its packaged `.exe` and send heartbeat reports to the admin server.
 
 ## Project File Structure
 
@@ -135,7 +135,7 @@ Routes:
 `drivefiles/drive_config.py`
 - Chooses the default drive.
 - Uses `DRIVE_AGENT_DEFAULT_DRIVE` for the default selected drive.
-- Uses `DRIVE_AGENT_DRIVE_PRIORITY` to order drives, for example `D,C,E`.
+- Uses `DRIVE_AGENT_DRIVE_PRIORITY` to order preferred non-system drives, for example `D,E`.
 - Discovers all available drives on the server PC.
 - Supports startup override with `DRIVE_AGENT_ROOT`.
 
@@ -187,7 +187,7 @@ Example `agent_config.json`:
   "file_batch_interval_seconds": 0.25,
   "change_debounce_seconds": 1,
   "lan_discovery_enabled": false,
-  "drive_priority": "D,C",
+  "drive_priority": "D",
   "priority_folders": "Users,Desktop,Documents,Downloads,OneDrive,Pictures"
 }
 ```
@@ -287,7 +287,7 @@ DRIVE_AGENT_API_TOKEN=<same-secret-token-used-by-the-exe>
 DRIVE_AGENT_ENABLE_LOCAL_SCANNER=False
 DRIVE_AGENT_ONLINE_SECONDS=90
 DRIVE_AGENT_DEFAULT_DRIVE=D:/
-DRIVE_AGENT_DRIVE_PRIORITY=D,C
+DRIVE_AGENT_DRIVE_PRIORITY=D
 DRIVE_AGENT_FILE_BATCH_SIZE=250
 DRIVE_AGENT_FILE_DOWNLOAD_WAIT_SECONDS=20
 DRIVE_AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT=True
@@ -355,7 +355,7 @@ $env:DRIVE_AGENT_API_TOKEN = "change-this-token"
 python agent_client.py
 ```
 
-After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D,C`, so `D:/` is preferred when available. All available drives start scanning immediately in parallel, so selecting another reported drive such as `C:/` can show early rows without waiting for `D:/` to finish. For large drives, the first batch is sent after the configured first-batch size, defaulting to 5 files, or after the configured interval, defaulting to about 0.25 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
+After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D`, so `D:/` is preferred when available, other non-system drives follow, and the Windows system drive such as `C:/` stays last. If the admin selects `C:/`, the dashboard queues that drive immediately and its file rows/counts keep increasing while the full scan continues. For large drives, the first batch is sent after the configured first-batch size, defaulting to 5 files, or after the configured interval, defaulting to about 0.25 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
 
 When the admin clicks Download for a remote file, the dashboard queues that exact file for the selected agent. On the next heartbeat, the EXE reads the file from the selected drive, uploads it to the dashboard through `/agent-file-download/`, and the browser receives a normal file download. Temporary remote-download files are stored under `remote_downloads/` by default and are ignored by Git.
 
@@ -376,7 +376,7 @@ After the dashboard is deployed, build the one-file user executable with the pub
     -HeartbeatSeconds 1 `
     -CountRefreshSeconds 60 `
     -FileBatchSize 250 `
-    -DrivePriority "D,C" `
+    -DrivePriority "D" `
     -FirstFileBatchSize 5 `
     -FileBatchIntervalSeconds 0.25 `
     -ChangeDebounceSeconds 1 `
