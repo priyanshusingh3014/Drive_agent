@@ -42,8 +42,8 @@ from .scanner import (
 )
 
 
-FRONTEND_REFRESH_SECONDS = 1
-ACTIVE_AGENTS_REFRESH_SECONDS = 1
+FRONTEND_REFRESH_SECONDS = 0.5
+ACTIVE_AGENTS_REFRESH_SECONDS = 0.5
 TABLE_PAGE_SIZE = 10
 SELECTED_DRIVE_SESSION_KEY = "drivefiles_selected_drive_root"
 SELECTED_AGENT_SESSION_KEY = "drivefiles_selected_agent_id"
@@ -1773,7 +1773,7 @@ def agent_files_batch(request):
     if not isinstance(raw_files, list):
         raw_files = []
 
-    batch_limit = getattr(settings, "AGENT_FILE_BATCH_SIZE", 500)
+    batch_limit = getattr(settings, "AGENT_FILE_BATCH_SIZE", 1000)
     normalized_files = [
         normalized_file
         for normalized_file in (
@@ -1800,7 +1800,7 @@ def agent_files_batch(request):
             )
             for file_information in normalized_files
         ],
-        batch_size=250,
+        batch_size=batch_limit,
     )
 
     if payload.get("scan_complete") and not drive_report.total_files:

@@ -11,7 +11,7 @@ param(
 
     [int]$CountRefreshSeconds = 60,
 
-    [int]$FileBatchSize = 250,
+    [int]$FileBatchSize = 1000,
 
     [int]$FirstFileBatchSize = 10,
 

@@ -24,7 +24,7 @@ services:
       - key: DRIVE_AGENT_DRIVE_PRIORITY
         value: "D"
       - key: DRIVE_AGENT_FILE_BATCH_SIZE
-        value: "250"
+        value: "1000"
       - key: DRIVE_AGENT_FILE_DOWNLOAD_WAIT_SECONDS
         value: "20"
       - key: DRIVE_AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT

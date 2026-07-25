@@ -178,7 +178,7 @@ Example `agent_config.json`:
   "api_token": "drive-agent-local-token",
   "heartbeat_seconds": 1,
   "count_refresh_seconds": 60,
-  "file_batch_size": 250,
+  "file_batch_size": 1000,
   "first_file_batch_size": 10,
   "file_batch_interval_seconds": 0.15,
   "system_drive_delay_seconds": 1,
@@ -285,7 +285,7 @@ DRIVE_AGENT_ENABLE_LOCAL_SCANNER=False
 DRIVE_AGENT_ONLINE_SECONDS=15
 DRIVE_AGENT_DEFAULT_DRIVE=D:/
 DRIVE_AGENT_DRIVE_PRIORITY=D
-DRIVE_AGENT_FILE_BATCH_SIZE=250
+DRIVE_AGENT_FILE_BATCH_SIZE=1000
 DRIVE_AGENT_FILE_DOWNLOAD_WAIT_SECONDS=20
 DRIVE_AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT=True
 WEB_CONCURRENCY=1
@@ -352,7 +352,7 @@ $env:DRIVE_AGENT_API_TOKEN = "change-this-token"
 python agent_client.py
 ```
 
-After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D`, so `D:/` is preferred when available, other non-system drives follow, and the Windows system drive such as `C:/` stays last. If the admin selects `C:/`, the dashboard queues that drive immediately and its file rows/counts keep increasing while the full scan continues. For large drives, the first batch is sent after the configured first-batch size, defaulting to 10 files, or after the configured interval, defaulting to about 0.15 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
+After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D`, so `D:/` is preferred when available, other non-system drives follow, and the Windows system drive such as `C:/` stays last. If the admin selects `C:/`, the dashboard queues that drive immediately and its file rows/counts keep increasing while the full scan continues. For large drives, the first batch is sent after the configured first-batch size, defaulting to 10 files, or after the configured interval, defaulting to about 0.15 seconds. The remaining files continue uploading in larger configurable batches, defaulting to 1000 files, so the dashboard table appears quickly and the total count increases with fewer network/database round trips. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
 
 File contents are not exposed from the dashboard table. The dashboard focuses on file metadata: name, path, type, size, distribution, storage, and live counts.
 
@@ -372,7 +372,7 @@ After the dashboard is deployed, build the one-file user executable with the pub
     -ApiToken "paste-the-same-token-used-in-render" `
     -HeartbeatSeconds 1 `
     -CountRefreshSeconds 60 `
-    -FileBatchSize 250 `
+    -FileBatchSize 1000 `
     -DrivePriority "D" `
     -FirstFileBatchSize 10 `
     -FileBatchIntervalSeconds 0.15 `

@@ -3,7 +3,7 @@
   "api_token": "drive-agent-local-token",
   "heartbeat_seconds": 1,
   "count_refresh_seconds": 60,
-  "file_batch_size": 250,
+  "file_batch_size": 1000,
   "first_file_batch_size": 10,
   "file_batch_interval_seconds": 0.15,
   "system_drive_delay_seconds": 1,
