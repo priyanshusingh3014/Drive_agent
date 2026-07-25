@@ -395,7 +395,7 @@ Copy only this file to the user PC:
 agent_download/DriveAgent.exe
 ```
 
-The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, a terminal opens briefly, the EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup for the current user, starts the background agent, and then closes. The background agent starts scanning and reports that PC to `Active Users`. Future Windows startup launches are hidden and do not leave a terminal open.
+The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, a terminal opens briefly, the EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup and Windows Installed Apps for the current user, starts the background agent, and then closes. The background agent starts scanning and reports that PC to `Active Users`. Future Windows startup launches are hidden and do not leave a terminal open.
 
 During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` within seconds while full file scanning continues in the background. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
 
@@ -407,13 +407,13 @@ The user download folder intentionally contains only:
 agent_download/DriveAgent.exe
 ```
 
-To remove the installed agent from a user PC, run this on that user PC:
+To remove the installed agent from a user PC, uninstall **DriveAgent** from Windows **Settings > Apps > Installed apps**, or run this on that user PC:
 
 ```powershell
 %LOCALAPPDATA%\DriveAgent\DriveAgent.exe --uninstall
 ```
 
-If the admin dashboard is reachable during uninstall, the PC is removed from `Active Users`.
+If the admin dashboard is reachable during uninstall, the PC is removed from `Active Users` and disappears from the sidebar on the next Active Users refresh. Deleting only a copied/downloaded EXE file cannot notify the dashboard; use the installed DriveAgent uninstall entry or the `--uninstall` command.
 
 ## Select Or Change Drive
 

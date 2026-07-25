@@ -44,6 +44,7 @@ FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 0.15
 FALLBACK_SYSTEM_DRIVE_DELAY_SECONDS = 1
 APP_DIRECTORY_NAME = "DriveAgent"
 RUN_REGISTRY_NAME = "DriveAgent"
+UNINSTALL_REGISTRY_NAME = "DriveAgent"
 EXCLUDED_FOLDER_NAMES = {
     "$recycle.bin",
     "recycled",
@@ -181,6 +182,24 @@ def _startup_command(executable_path, server_url, api_token):
     )
 
 
+def _quoted_windows_argument(value):
+    escaped_value = str(value).replace('"', r'\"')
+    return f'"{escaped_value}"'
+
+
+def _uninstall_command(executable_path, server_url, api_token):
+    return " ".join(
+        [
+            _quoted_windows_argument(executable_path),
+            "--uninstall",
+            "--server-url",
+            _quoted_windows_argument(server_url),
+            "--api-token",
+            _quoted_windows_argument(api_token),
+        ]
+    )
+
+
 def add_startup_entry(executable_path, server_url, api_token):
     if os.name != "nt":
         return
@@ -223,6 +242,102 @@ def remove_startup_entry():
         pass
     except OSError as error:
         log_message(f"Unable to remove DriveAgent startup: {error}")
+
+
+def add_uninstall_entry(executable_path, server_url, api_token):
+    if os.name != "nt":
+        return
+
+    try:
+        import winreg
+
+        registry_path = (
+            rf"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+            rf"\{UNINSTALL_REGISTRY_NAME}"
+        )
+
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER,
+            registry_path,
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as registry_key:
+            uninstall_command = _uninstall_command(
+                executable_path,
+                server_url,
+                api_token,
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "DisplayName",
+                0,
+                winreg.REG_SZ,
+                "DriveAgent",
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "DisplayVersion",
+                0,
+                winreg.REG_SZ,
+                "1.0",
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "Publisher",
+                0,
+                winreg.REG_SZ,
+                "DriveAgent",
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "InstallLocation",
+                0,
+                winreg.REG_SZ,
+                str(executable_path.parent),
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "DisplayIcon",
+                0,
+                winreg.REG_SZ,
+                str(executable_path),
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "UninstallString",
+                0,
+                winreg.REG_SZ,
+                uninstall_command,
+            )
+            winreg.SetValueEx(
+                registry_key,
+                "QuietUninstallString",
+                0,
+                winreg.REG_SZ,
+                uninstall_command,
+            )
+            winreg.SetValueEx(registry_key, "NoModify", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(registry_key, "NoRepair", 0, winreg.REG_DWORD, 1)
+    except OSError as error:
+        log_message(f"Unable to register DriveAgent uninstall entry: {error}")
+
+
+def remove_uninstall_entry():
+    if os.name != "nt":
+        return
+
+    try:
+        import winreg
+
+        registry_path = (
+            rf"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+            rf"\{UNINSTALL_REGISTRY_NAME}"
+        )
+        winreg.DeleteKey(winreg.HKEY_CURRENT_USER, registry_path)
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        log_message(f"Unable to remove DriveAgent uninstall entry: {error}")
 
 
 def start_installed_agent(executable_path, server_url, api_token):
@@ -279,6 +394,7 @@ def install_and_start_agent(server_url, api_token):
             shutil.copy2(current_executable, installed_executable)
 
         add_startup_entry(installed_executable, server_url, api_token)
+        add_uninstall_entry(installed_executable, server_url, api_token)
         registration_ok = send_initial_agent_heartbeat(server_url, api_token)
         start_installed_agent(installed_executable, server_url, api_token)
         log_message(f"DriveAgent installed at {installed_executable}.")
@@ -1703,6 +1819,7 @@ def main():
 
         if args.uninstall:
             remove_startup_entry()
+            remove_uninstall_entry()
             remove_installed_files()
             stop_agent_processes_after_delay()
 

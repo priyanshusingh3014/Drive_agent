@@ -596,6 +596,10 @@ class ActiveAgentHeartbeatTests(TestCase):
             self.assertEqual(response.status_code, 404)
 
     def test_agent_uninstall_removes_active_agent(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
         agent = ActiveAgent.objects.create(
             agent_id="remote-pc-remove",
             host_name="REMOVE-PC",
@@ -643,6 +647,14 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertFalse(
             ActiveAgentFile.objects.filter(agent__agent_id="remote-pc-remove").exists()
         )
+
+        self.client.force_login(user)
+        active_response = self.client.get("/active-agents-data/")
+        active_data = active_response.json()
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(active_data["total_agents"], 0)
+        self.assertEqual(active_data["agents"], [])
 
     def test_selecting_active_agent_shows_remote_dashboard_files(self):
         user = get_user_model().objects.create_user(
