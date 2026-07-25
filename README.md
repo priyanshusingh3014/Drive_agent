@@ -71,7 +71,7 @@ The frontend uses Django templates and external CSS only.
 
 `drivefiles/templates/drivefiles/_file_rows.html`
 - Reusable file table rows.
-- Shows file name, path, type, size, and Download action.
+- Shows file name, path, type, and size.
 
 `drivefiles/static/drivefiles/css/auth.css`
 - Login/signup page styling.
@@ -101,11 +101,9 @@ The frontend uses Django templates and external CSS only.
 - Handles selected-drive scanning.
 - In hosted mode, automatically shows the single online installed agent as the default dashboard when exactly one PC is reporting.
 - Handles real-time file search and pagination.
-- Handles secure file downloads.
 - Handles the Active Users JSON feed.
 - Handles `/agent-heartbeat/`, where installed agents report host, IP, MAC, drives, file counts, and storage usage.
 - Handles `/agent-files-batch/`, where installed agents upload file metadata in batches.
-- Handles `/agent-file-download/`, where installed agents upload requested file bytes for dashboard downloads.
 - Handles `/agent-uninstall/`, where uninstalling agents remove themselves from Active Users.
 - Handles `/agent-ping/`, where the hosted platform and user EXE confirm the dashboard API is reachable.
 - Handles `/select-agent/`, where the admin switches the dashboard to a selected active user's PC.
@@ -123,10 +121,8 @@ Routes:
 /agent-ping/         Agent dashboard health/connectivity API
 /agent-heartbeat/    Agent reporting API
 /agent-files-batch/ Agent file metadata batch API
-/agent-file-download/ Agent requested file upload API
 /agent-uninstall/   Agent uninstall/removal API
 /select-agent/      Select or clear an Active User dashboard
-/download/           File download endpoint
 /admin/              Django admin
 ```
 
@@ -358,7 +354,7 @@ python agent_client.py
 
 After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D`, so `D:/` is preferred when available, other non-system drives follow, and the Windows system drive such as `C:/` stays last. If the admin selects `C:/`, the dashboard queues that drive immediately and its file rows/counts keep increasing while the full scan continues. For large drives, the first batch is sent after the configured first-batch size, defaulting to 10 files, or after the configured interval, defaulting to about 0.15 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
 
-When the admin clicks Download for a remote file, the dashboard queues that exact file for the selected agent. On the next heartbeat, the EXE reads the file from the selected drive, uploads it to the dashboard through `/agent-file-download/`, and the browser receives a normal file download. Temporary remote-download files are stored under `remote_downloads/` by default and are ignored by Git.
+File contents are not exposed from the dashboard table. The dashboard focuses on file metadata: name, path, type, size, distribution, storage, and live counts.
 
 ## Build User Agent EXE
 
@@ -456,8 +452,6 @@ $env:DRIVE_AGENT_ROOT = "E:/"
 - Deleted files reduce the file count.
 - Recycle/system folders are ignored.
 - Independent real-time search bars.
-- Download action for indexed files.
-- Local and active-user remote files are downloadable from the dashboard.
 - Active Users section for installed/running user agents.
 - Hostnames appear only under the left sidebar Active Users option.
 - In hosted mode, a single installed/running PC becomes the default dashboard automatically.

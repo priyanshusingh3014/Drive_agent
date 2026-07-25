@@ -536,7 +536,7 @@ class ActiveAgentHeartbeatTests(TestCase):
                     b"remote file bytes",
                 )
 
-    def test_dashboard_serves_ready_remote_file_download(self):
+    def test_dashboard_download_route_is_not_available(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -593,14 +593,7 @@ class ActiveAgentHeartbeatTests(TestCase):
                 "/download/",
                 data={"path": file_report.relative_path},
             )
-            self.assertEqual(response.status_code, 200)
-            downloaded_content = b"".join(response.streaming_content)
-
-            self.assertEqual(downloaded_content, b"ready remote content")
-            self.assertEqual(
-                response.headers["Content-Disposition"],
-                'attachment; filename="Ready_Remote.txt"',
-            )
+            self.assertEqual(response.status_code, 404)
 
     def test_agent_uninstall_removes_active_agent(self):
         agent = ActiveAgent.objects.create(
@@ -709,7 +702,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["selected_agent_id"], "remote-pc-2")
         self.assertEqual(data["dashboard"]["system_info"]["host_name"], "DESIGN-PC")
         self.assertIn("Design_Board.png", data["rows_html"])
-        self.assertIn("Download", data["rows_html"])
+        self.assertNotIn("Download", data["rows_html"])
 
     def test_selecting_active_agent_prefers_d_drive(self):
         user = get_user_model().objects.create_user(

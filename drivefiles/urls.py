@@ -15,5 +15,4 @@ urlpatterns = [
     path("select-agent/", views.select_agent, name="select_agent"),
     path("select-drive/", views.select_drive, name="select_drive"),
     path("scan-now/", views.scan_now, name="scan_now"),
-    path("download/", views.download_file, name="download_file"),
 ]

@@ -1155,12 +1155,12 @@
 
         th:nth-child(1),
         td:nth-child(1) {
-            width: 30%;
+            width: 34%;
         }
 
         th:nth-child(2),
         td:nth-child(2) {
-            width: 34%;
+            width: 43%;
         }
 
         th:nth-child(3),
@@ -1170,12 +1170,7 @@
 
         th:nth-child(4),
         td:nth-child(4) {
-            width: 11%;
-        }
-
-        th:nth-child(5),
-        td:nth-child(5) {
-            width: 14%;
+            width: 12%;
         }
 
         th {
@@ -1269,40 +1264,6 @@
             font-size: 11px;
             font-weight: 800;
             white-space: nowrap;
-        }
-
-        .download-action {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 4px;
-            min-height: 20px;
-            padding: 2px 6px;
-            color: var(--brand);
-            background: var(--brand-soft);
-            border: 1px solid rgba(5, 95, 240, 0.18);
-            border-radius: 8px;
-            font-size: 11px;
-            font-weight: 500;
-            white-space: nowrap;
-            transition:
-                background-color 160ms ease,
-                border-color 160ms ease,
-                color 160ms ease;
-        }
-
-        .download-action:hover {
-            color: #ffffff;
-            background: var(--green);
-            border-color: var(--green);
-        }
-
-        .download-action.disabled,
-        .download-action.disabled:hover {
-            color: #667085;
-            background: #f2f4f7;
-            border-color: #e4e7ec;
-            cursor: default;
         }
 
         .empty-state {
@@ -1725,7 +1686,6 @@
             .sidebar-user-name,
             .file-name,
             .file-icon,
-            .download-action,
             .page-button,
             .donut-total
         ) {
@@ -1775,7 +1735,6 @@
             .system-value,
             .sidebar-user-name,
             .file-name,
-            .download-action,
             .page-button.active,
             .donut-total
         ) {
