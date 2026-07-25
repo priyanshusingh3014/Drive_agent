@@ -13,7 +13,6 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import login
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
@@ -659,9 +658,8 @@ def signup(request):
         form = AgentSignupForm(request.POST)
 
         if form.is_valid():
-            user = form.save()
-            login(request, user)
-            return redirect(_safe_redirect_target(request))
+            form.save()
+            return redirect("login")
     else:
         form = AgentSignupForm()
 

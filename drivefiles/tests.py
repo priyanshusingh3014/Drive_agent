@@ -96,6 +96,28 @@ class ScannerTests(SimpleTestCase):
         self.assertIn("after.txt", file_names)
 
 
+class AuthFlowTests(TestCase):
+    def test_signup_redirects_to_login_without_authenticating_user(self):
+        response = self.client.post(
+            "/signup/",
+            data={
+                "username": "new-admin",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertRedirects(response, "/login/", fetch_redirect_response=False)
+        self.assertTrue(
+            get_user_model().objects.filter(username="new-admin").exists()
+        )
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+        dashboard_response = self.client.get("/")
+        self.assertEqual(dashboard_response.status_code, 302)
+        self.assertIn("/login/", dashboard_response["Location"])
+
+
 @override_settings(AGENT_API_TOKEN="test-token")
 class ActiveAgentHeartbeatTests(TestCase):
     def setUp(self):
