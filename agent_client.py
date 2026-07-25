@@ -51,6 +51,11 @@ EXCLUDED_FOLDER_NAMES = {
     "recycler",
     "system volume information",
 }
+WINDOWS_FILE_ATTRIBUTE_HIDDEN = 0x2
+WINDOWS_FILE_ATTRIBUTE_SYSTEM = 0x4
+WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES = (
+    WINDOWS_FILE_ATTRIBUTE_HIDDEN | WINDOWS_FILE_ATTRIBUTE_SYSTEM
+)
 PRIORITY_FOLDER_NAMES = {
     "desktop",
     "documents",
@@ -848,11 +853,29 @@ def _folder_scan_key(folder_path, priority_folder_names):
     )
 
 
-def file_metadata(root, entry):
+def _visible_entry_stat(entry):
+    if entry.name.startswith("."):
+        return None
+
     try:
         stat_result = entry.stat(follow_symlinks=False)
     except OSError:
         return None
+
+    file_attributes = getattr(stat_result, "st_file_attributes", 0)
+
+    if file_attributes & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
+        return None
+
+    return stat_result
+
+
+def file_metadata(root, entry, stat_result=None):
+    if stat_result is None:
+        stat_result = _visible_entry_stat(entry)
+
+        if stat_result is None:
+            return None
 
     file_path = Path(entry.path)
     extension = file_path.suffix or "No extension"
@@ -1295,14 +1318,19 @@ class FileCountCache:
                 with os.scandir(current_folder) as entries:
                     for entry in entries:
                         try:
+                            entry_stat = _visible_entry_stat(entry)
+
+                            if entry_stat is None:
+                                continue
+
                             if entry.is_dir(follow_symlinks=False):
                                 if entry.name.lower() not in EXCLUDED_FOLDER_NAMES:
                                     folder_paths.append(entry.path)
                             elif entry.is_file(follow_symlinks=False):
-                                metadata = file_metadata(root, entry)
-                                total_files += 1
+                                metadata = file_metadata(root, entry, entry_stat)
 
                                 if metadata:
+                                    total_files += 1
                                     file_batch.append(metadata)
 
                                 next_batch_size = (

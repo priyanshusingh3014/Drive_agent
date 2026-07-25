@@ -139,6 +139,7 @@ Routes:
 - Scans the selected drive on the server PC.
 - Detects new, changed, and deleted files.
 - Excludes Recycle Bin and protected system folders.
+- Skips hidden/system files and folders on every selected drive.
 - Keeps per-drive in-memory cache for faster switching.
 - Publishes partial results while large drives are scanning.
 - Shows the first files quickly while the rest of a large drive continues scanning in the background.
@@ -159,6 +160,7 @@ When it runs on a user PC, it sends this PC information to the admin server:
 - File metadata per drive, including file name, path, type, size, and modified time
 
 It does not upload file contents.
+It scans visible files only; hidden/system files and folders are skipped on every drive before file metadata is counted or sent.
 
 The user package can still be a single file because build-time defaults are embedded into the EXE. The admin endpoint is not fixed in source code; it is supplied by the build command, an environment variable, or `agent_config.json`.
 
@@ -453,6 +455,7 @@ $env:DRIVE_AGENT_ROOT = "E:/"
 - New files appear near the top.
 - Deleted files reduce the file count.
 - Recycle/system folders are ignored.
+- Hidden/system files and folders are skipped on every drive for faster visible-file scans.
 - Independent real-time search bars.
 - Active Users section for installed/running user agents.
 - Hostnames appear only under the left sidebar Active Users option.

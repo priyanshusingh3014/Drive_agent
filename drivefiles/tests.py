@@ -50,6 +50,21 @@ class ScannerTests(SimpleTestCase):
 
         self.assertEqual(file_names, {"selected-drive-file.txt"})
 
+    def test_scan_skips_hidden_dot_files_and_folders(self):
+        (self.first_root / "visible-file.txt").write_text("visible")
+        (self.first_root / ".hidden-file.txt").write_text("hidden")
+        hidden_folder = self.first_root / ".hidden-folder"
+        hidden_folder.mkdir()
+        (hidden_folder / "nested-hidden-file.txt").write_text("nested")
+
+        scanner.set_drive_root(self.first_root)
+        scanner.scan_drive()
+
+        snapshot = scanner.get_file_snapshot("")
+        file_names = {file_information["name"] for file_information in snapshot["files"]}
+
+        self.assertEqual(file_names, {"visible-file.txt"})
+
     def test_switching_back_to_drive_restores_cached_files(self):
         (self.first_root / "first-drive.txt").write_text("first")
         (self.second_root / "second-drive.pdf").write_text("second")

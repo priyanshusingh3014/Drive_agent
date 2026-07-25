@@ -22,6 +22,11 @@ EXCLUDED_FOLDER_NAMES = {
     "recycler",
     "system volume information",
 }
+WINDOWS_FILE_ATTRIBUTE_HIDDEN = 0x2
+WINDOWS_FILE_ATTRIBUTE_SYSTEM = 0x4
+WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES = (
+    WINDOWS_FILE_ATTRIBUTE_HIDDEN | WINDOWS_FILE_ATTRIBUTE_SYSTEM
+)
 PRIORITY_FOLDER_NAMES = {
     "desktop",
     "documents",
@@ -195,7 +200,27 @@ def _get_file_type_metadata(extension):
 
 
 def _is_excluded_drive_path(path):
-    return any(part.lower() in EXCLUDED_FOLDER_NAMES for part in path.parts)
+    return any(
+        part.lower() in EXCLUDED_FOLDER_NAMES or part.startswith(".")
+        for part in path.parts
+    )
+
+
+def _visible_path_stat(path):
+    if path.name.startswith("."):
+        return None
+
+    try:
+        stat_result = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return None
+
+    file_attributes = getattr(stat_result, "st_file_attributes", 0)
+
+    if file_attributes & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
+        return None
+
+    return stat_result
 
 
 def _folder_scan_key(folder_name):
@@ -323,6 +348,7 @@ def _collect_files(
                 subfolder
                 for subfolder in subfolders
                 if subfolder.lower() not in EXCLUDED_FOLDER_NAMES
+                and _visible_path_stat(Path(folder_path) / subfolder) is not None
             ],
             key=_folder_scan_key,
         )
@@ -339,7 +365,11 @@ def _collect_files(
             full_path = Path(folder_path) / filename
 
             try:
-                file_information = full_path.stat()
+                file_information = _visible_path_stat(full_path)
+
+                if file_information is None:
+                    continue
+
                 relative_path = full_path.relative_to(drive_root)
                 extension = full_path.suffix or "No extension"
                 type_metadata = _get_file_type_metadata(extension)
