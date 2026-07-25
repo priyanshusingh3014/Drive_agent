@@ -271,8 +271,18 @@ def install_and_start_agent(server_url, api_token):
             shutil.copy2(current_executable, installed_executable)
 
         add_startup_entry(installed_executable, server_url, api_token)
+        registration_ok = send_initial_agent_heartbeat(server_url, api_token)
         start_installed_agent(installed_executable, server_url, api_token)
         log_message(f"DriveAgent installed at {installed_executable}.")
+
+        if not registration_ok:
+            log_message(
+                "DriveAgent installed, but the dashboard rejected the first "
+                "connection. Check the Render DRIVE_AGENT_API_TOKEN and rebuild "
+                "the EXE with the same token."
+            )
+            time.sleep(8)
+
         return True
     except OSError as error:
         log_message(f"DriveAgent install failed: {error}")
@@ -1423,6 +1433,30 @@ def post_json(url, api_token, payload, return_payload=False):
 
 def post_heartbeat(server_url, api_token, payload):
     return post_json(server_url, api_token, payload, return_payload=True)
+
+
+def send_initial_agent_heartbeat(server_url, api_token):
+    try:
+        status, _response_payload = post_heartbeat(
+            server_url,
+            api_token,
+            collect_payload(None),
+        )
+        log_message(
+            f"Initial DriveAgent registration sent to {server_url} "
+            f"with status {status}."
+        )
+        return True
+    except urllib.error.HTTPError as error:
+        log_message(
+            f"Initial DriveAgent registration failed with HTTP {error.code}. "
+            "This usually means the EXE token does not match Render "
+            "DRIVE_AGENT_API_TOKEN."
+        )
+    except (OSError, urllib.error.URLError) as error:
+        log_message(f"Initial DriveAgent registration failed: {error}")
+
+    return False
 
 
 def report_file_download_failure(server_url, api_token, identity, download_request, error):

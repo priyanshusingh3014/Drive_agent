@@ -399,6 +399,8 @@ agent_download/DriveAgent.exe
 
 The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, a terminal opens briefly, the EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup for the current user, starts the background agent, and then closes. The background agent starts scanning and reports that PC to `Active Users`. Future Windows startup launches are hidden and do not leave a terminal open.
 
+During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` quickly while full file scanning continues in the background. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
+
 The installed EXE does not create `agent.log` or any text file by default. For debugging only, set `DRIVE_AGENT_LOG_FILE=1` or set `DRIVE_AGENT_LOG_FILE` to a full log path before running the agent.
 
 The user download folder intentionally contains only:
