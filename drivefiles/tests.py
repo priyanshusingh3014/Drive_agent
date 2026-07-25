@@ -798,6 +798,66 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertIn("D_File.txt", data["rows_html"])
         self.assertNotIn("C_File.txt", data["rows_html"])
 
+    def test_remote_agent_file_pagination_returns_next_page(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-pagination",
+            host_name="PAGE-PC",
+            ip_address="192.168.1.94",
+            drive_count=1,
+            total_files=12,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=12,
+            indexed_files=12,
+            count_complete=True,
+        )
+
+        for index in range(12):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=f"D_File_{index:02d}.txt",
+                folder="D:\\Work",
+                relative_path=f"Work\\D_File_{index:02d}.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+                freshness_timestamp=index,
+            )
+
+        self.client.force_login(user)
+        select_response = self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-pagination"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(select_response.status_code, 200)
+
+        response = self.client.get(
+            "/files-data/",
+            data={"page": 2},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["pagination"]["page_number"], 2)
+        self.assertEqual(data["pagination"]["page_start_display"], "11")
+        self.assertEqual(data["pagination"]["page_end_display"], "12")
+        self.assertIn("D_File_01.txt", data["rows_html"])
+        self.assertIn("D_File_00.txt", data["rows_html"])
+        self.assertNotIn("D_File_11.txt", data["rows_html"])
+
     def test_selecting_remote_drive_queues_priority_scan_for_agent(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
@@ -812,15 +872,45 @@ class ActiveAgentHeartbeatTests(TestCase):
             total_files=0,
             latest_payload={},
         )
-        ActiveAgentDrive.objects.create(
+        d_drive = ActiveAgentDrive.objects.create(
             agent=agent,
             label="D:\\",
             value="D:/",
+            total_files=1,
+            indexed_files=1,
         )
-        ActiveAgentDrive.objects.create(
+        c_drive = ActiveAgentDrive.objects.create(
             agent=agent,
             label="C:\\",
             value="C:/",
+            total_files=1,
+            indexed_files=1,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=d_drive,
+            name="D_Selected.txt",
+            folder="D:\\Work",
+            relative_path="Work\\D_Selected.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=c_drive,
+            name="C_Selected.txt",
+            folder="C:\\Work",
+            relative_path="Work\\C_Selected.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
         )
 
         self.client.force_login(user)
@@ -837,6 +927,11 @@ class ActiveAgentHeartbeatTests(TestCase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         self.assertEqual(select_drive_response.status_code, 200)
+        select_drive_data = select_drive_response.json()
+        self.assertEqual(select_drive_data["selected_drive_value"], "C:/")
+        self.assertEqual(select_drive_data["dashboard"]["drive_label"], "C:\\")
+        self.assertIn("C_Selected.txt", select_drive_data["rows_html"])
+        self.assertNotIn("D_Selected.txt", select_drive_data["rows_html"])
 
         agent.refresh_from_db()
         self.assertEqual(agent.latest_payload["requested_drive_values"], ["C:/"])

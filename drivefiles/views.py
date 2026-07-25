@@ -13,6 +13,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
@@ -305,12 +306,13 @@ def _normalize_agent_file(raw_file):
 
 def _drive_report_payload(drive_report):
     storage = drive_report.storage if isinstance(drive_report.storage, dict) else {}
+    total_files = max(drive_report.total_files, drive_report.indexed_files)
 
     return {
         "label": drive_report.label,
         "value": drive_report.value,
-        "total_files": drive_report.total_files,
-        "total_files_display": _format_number(drive_report.total_files),
+        "total_files": total_files,
+        "total_files_display": _format_number(total_files),
         "indexed_files": drive_report.indexed_files,
         "indexed_files_display": _format_number(drive_report.indexed_files),
         "count_complete": drive_report.count_complete,
@@ -841,12 +843,7 @@ def _matches_file_type_filter(file_information, filter_type):
     return _file_type_category_key(file_information) == filter_type
 
 
-def _build_file_type_distribution(files, cache_key=None):
-    if cache_key and cache_key in _DISTRIBUTION_CACHE:
-        return _DISTRIBUTION_CACHE[cache_key]
-
-    total_files = len(files)
-    category_counts = Counter(_file_type_category_key(file_information) for file_information in files)
+def _distribution_from_counts(total_files, category_counts, cache_key=None):
     items = []
 
     for group in FILE_TYPE_GROUPS:
@@ -902,6 +899,15 @@ def _build_file_type_distribution(files, cache_key=None):
             _DISTRIBUTION_CACHE.pop(oldest_key, None)
 
     return distribution
+
+
+def _build_file_type_distribution(files, cache_key=None):
+    if cache_key and cache_key in _DISTRIBUTION_CACHE:
+        return _DISTRIBUTION_CACHE[cache_key]
+
+    total_files = len(files)
+    category_counts = Counter(_file_type_category_key(file_information) for file_information in files)
+    return _distribution_from_counts(total_files, category_counts, cache_key)
 
 
 def _build_recent_activity(all_snapshot, system_info, total_files, drive_label):
@@ -1025,6 +1031,91 @@ def _remote_file_matches_search(file_information, search_query):
     return normalized_query in haystack
 
 
+def _remote_search_q(search_query):
+    if not search_query:
+        return Q()
+
+    return (
+        Q(name__icontains=search_query)
+        | Q(folder__icontains=search_query)
+        | Q(relative_path__icontains=search_query)
+        | Q(extension__icontains=search_query)
+        | Q(type_label__icontains=search_query)
+    )
+
+
+def _remote_type_q(filter_type):
+    if filter_type == "all":
+        return Q()
+
+    if filter_type not in FILE_TYPE_GROUP_BY_KEY:
+        return Q()
+
+    category_classes = {
+        "archives": ("archive",),
+        "documents": ("document", "pdf"),
+        "images": ("image",),
+        "spreadsheets": ("spreadsheet",),
+        "videos": ("video",),
+    }
+
+    if filter_type == "others":
+        known_type_q = Q()
+
+        for category_key in FILE_TYPE_GROUP_BY_KEY:
+            if category_key not in {"all", "others"}:
+                known_type_q |= _remote_type_q(category_key)
+
+        return ~known_type_q
+
+    group = FILE_TYPE_GROUP_BY_KEY[filter_type]
+    query = Q(type_class__in=category_classes.get(filter_type, ()))
+
+    if group["extensions"]:
+        query |= Q(extension__in=group["extensions"])
+
+    return query
+
+
+def _remote_files_queryset(drive_report, search_query="", filter_type="all"):
+    queryset = ActiveAgentFile.objects.filter(drive=drive_report)
+    query = _remote_search_q(search_query) & _remote_type_q(filter_type)
+
+    if query:
+        queryset = queryset.filter(query)
+
+    return queryset
+
+
+def _build_remote_file_type_distribution(drive_report, cache_key=None):
+    if cache_key and cache_key in _DISTRIBUTION_CACHE:
+        return _DISTRIBUTION_CACHE[cache_key]
+
+    if not drive_report:
+        return _distribution_from_counts(0, Counter(), cache_key)
+
+    category_counts = Counter()
+    total_files = 0
+
+    for row in (
+        drive_report.file_reports.values("type_class", "extension")
+        .annotate(file_count=Count("id"))
+        .iterator()
+    ):
+        file_count = row["file_count"]
+        total_files += file_count
+        category_counts[
+            _file_type_category_key(
+                {
+                    "type_class": row["type_class"],
+                    "extension": row["extension"],
+                }
+            )
+        ] += file_count
+
+    return _distribution_from_counts(total_files, category_counts, cache_key)
+
+
 def _agent_drive_options(agent, selected_drive_value):
     drive_reports = _ordered_agent_drive_reports(agent.drive_reports.all())
     options = [
@@ -1063,9 +1154,8 @@ def _agent_drive_version(agent, drive_report):
         if drive_report
         else agent.last_seen_at
     )
-    file_count = drive_report.file_reports.count() if drive_report else 0
 
-    return _timestamp_version(last_scan_source) + file_count
+    return _timestamp_version(last_scan_source)
 
 
 def _build_agent_dashboard_summary(agent, drive_report, all_files, current_files):
@@ -1092,6 +1182,73 @@ def _build_agent_dashboard_summary(agent, drive_report, all_files, current_files
             _timestamp_version(drive_report.last_reported_at if drive_report else agent.last_seen_at),
             indexed_files,
         ),
+    )
+    progress_percent = 100 if drive_report and drive_report.count_complete else 0
+
+    if drive_report and total_files:
+        progress_percent = min(
+            100,
+            round((indexed_files / total_files) * 100, 1),
+        )
+    elif indexed_files:
+        progress_percent = 100
+
+    return {
+        "app_name": f"{agent.host_name} DriveAgent",
+        "dashboard_title": f"{agent.host_name} Dashboard",
+        "drive_initial": _drive_initial_from_label(drive_label),
+        "drive_label": drive_label,
+        "drive_name": _drive_name_from_label(drive_label),
+        "data_source": "agent",
+        "selected_agent_id": agent.agent_id,
+        "selected_agent_host": agent.host_name,
+        "total_files": total_files,
+        "total_files_display": _format_number(total_files),
+        "current_files_display": _format_number(current_file_count),
+        "processed_files_display": _format_number(indexed_files),
+        "failed_files_display": "0",
+        "progress_percent": progress_percent,
+        "sync_status_title": (
+            "Remote Sync Complete"
+            if drive_report and drive_report.count_complete
+            else "Remote Sync Running"
+        ),
+        "system_info": {
+            "host_name": agent.host_name,
+            "ip_address": agent.ip_address or "Unavailable",
+            "mac_address": agent.mac_address or "Unavailable",
+            "os_label": agent.os_label or "Unknown OS",
+            "architecture": agent.architecture or "Unknown architecture",
+        },
+        "storage_info": storage_info,
+        "distribution_items": type_distribution["items"],
+        "distribution_gradient": type_distribution["gradient"],
+        "recent_activity": [],
+    }
+
+
+def _build_agent_dashboard_summary_from_counts(
+    agent,
+    drive_report,
+    indexed_files,
+    current_file_count,
+    type_distribution,
+):
+    drive_label = drive_report.label if drive_report else "No drive"
+    total_files = (
+        max(drive_report.total_files, drive_report.indexed_files, indexed_files)
+        if drive_report
+        else 0
+    )
+    storage_info = (
+        _drive_report_payload(drive_report)["storage"]
+        if drive_report
+        else {
+            "used_display": "Unavailable",
+            "total_display": "Unavailable",
+            "free_display": "Unavailable",
+            "percent_used": 0,
+        }
     )
     progress_percent = 100 if drive_report and drive_report.count_complete else 0
 
@@ -1366,37 +1523,51 @@ def _build_agent_files_context(request, selected_agent):
     filter_type = request.GET.get("type", "all").strip().lower()
     page_number = _parse_positive_int(request.GET.get("page"), default=1)
 
-    if selected_drive:
-        all_files = [
-            _remote_file_to_dict(file_report)
-            for file_report in selected_drive.file_reports.order_by(
-                "-freshness_timestamp",
-                "name",
-            )
-        ]
-    else:
-        all_files = []
+    indexed_files = selected_drive.indexed_files if selected_drive else 0
 
-    searched_files = [
-        file_information
-        for file_information in all_files
-        if _remote_file_matches_search(file_information, search_query)
-    ]
-    filtered_files, filter_type = _filter_files(searched_files, filter_type)
-    pagination = _build_pagination_context(len(filtered_files), page_number)
+    if filter_type != "all" and filter_type not in FILE_TYPE_GROUP_BY_KEY:
+        filter_type = "all"
+
+    filtered_queryset = (
+        _remote_files_queryset(selected_drive, search_query, filter_type)
+        if selected_drive
+        else ActiveAgentFile.objects.none()
+    )
+    if selected_drive and not search_query and filter_type == "all":
+        filtered_count = indexed_files
+    else:
+        filtered_count = filtered_queryset.count()
+    pagination = _build_pagination_context(filtered_count, page_number)
     page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
-    paged_files = filtered_files[page_start_index:pagination["page_end"]]
+    paged_files = [
+        _remote_file_to_dict(file_report)
+        for file_report in filtered_queryset.order_by(
+            "-freshness_timestamp",
+            "name",
+        )[page_start_index:pagination["page_end"]]
+    ]
     last_scan_source = (
         selected_drive.last_reported_at
         if selected_drive
         else selected_agent.last_seen_at
     )
     active_agents_payload = _active_agents_json_payload(selected_agent.agent_id)
-    dashboard_summary = _build_agent_dashboard_summary(
+    type_distribution = _build_remote_file_type_distribution(
+        selected_drive,
+        cache_key=(
+            "agent-db",
+            selected_agent.agent_id,
+            selected_drive.value if selected_drive else "",
+            _timestamp_version(last_scan_source),
+            indexed_files,
+        ),
+    )
+    dashboard_summary = _build_agent_dashboard_summary_from_counts(
         selected_agent,
         selected_drive,
-        all_files,
-        filtered_files,
+        indexed_files,
+        filtered_count,
+        type_distribution,
     )
 
     return {
@@ -1404,7 +1575,7 @@ def _build_agent_files_context(request, selected_agent):
         **_format_datetime_parts(last_scan_source),
         **pagination,
         "files": paged_files,
-        "all_files": all_files,
+        "all_files": [],
         "content_signature": (),
         "error_message": None,
         "filter_options": FILTER_OPTIONS,
@@ -1656,20 +1827,61 @@ def agent_heartbeat(request):
             continue
 
         reported_drive_values.append(drive["value"])
-        ActiveAgentDrive.objects.update_or_create(
+        drive_report, _drive_created = ActiveAgentDrive.objects.get_or_create(
             agent=agent,
             value=drive["value"],
             defaults={
                 "label": drive["label"],
-                "total_files": drive["total_files"],
-                "indexed_files": drive["indexed_files"],
-                "count_complete": drive["count_complete"],
-                "storage": drive["storage"],
             },
+        )
+        incoming_total_files = drive["total_files"]
+        incoming_indexed_files = drive["indexed_files"]
+
+        if drive["count_complete"]:
+            total_files_value = max(incoming_total_files, incoming_indexed_files)
+            indexed_files_value = incoming_indexed_files
+            count_complete_value = True
+        else:
+            total_files_value = max(
+                drive_report.total_files,
+                drive_report.indexed_files,
+                incoming_total_files,
+                incoming_indexed_files,
+            )
+            indexed_files_value = max(
+                drive_report.indexed_files,
+                incoming_indexed_files,
+            )
+            count_complete_value = False
+
+        drive_report.label = drive["label"]
+        drive_report.total_files = total_files_value
+        drive_report.indexed_files = indexed_files_value
+        drive_report.count_complete = count_complete_value
+        drive_report.storage = drive["storage"]
+        drive_report.save(
+            update_fields=(
+                "label",
+                "total_files",
+                "indexed_files",
+                "count_complete",
+                "storage",
+                "last_reported_at",
+            )
         )
 
     if reported_drive_values:
         agent.drive_reports.exclude(value__in=reported_drive_values).delete()
+
+    agent.total_files = sum(
+        max(total_files, indexed_files)
+        for total_files, indexed_files in agent.drive_reports.values_list(
+            "total_files",
+            "indexed_files",
+        )
+    )
+    agent.drive_count = agent.drive_reports.count()
+    agent.save(update_fields=("total_files", "drive_count", "last_seen_at"))
 
     return JsonResponse(
         {
