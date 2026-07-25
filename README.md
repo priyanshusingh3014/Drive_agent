@@ -183,8 +183,8 @@ Example `agent_config.json`:
   "heartbeat_seconds": 1,
   "count_refresh_seconds": 60,
   "file_batch_size": 250,
-  "first_file_batch_size": 10,
-  "file_batch_interval_seconds": 1,
+  "first_file_batch_size": 5,
+  "file_batch_interval_seconds": 0.25,
   "change_debounce_seconds": 1,
   "lan_discovery_enabled": false,
   "drive_priority": "D,C",
@@ -355,7 +355,7 @@ $env:DRIVE_AGENT_API_TOKEN = "change-this-token"
 python agent_client.py
 ```
 
-After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D,C`, so `D:/` is reported first when available. When the admin selects another reported drive such as `C:/`, the dashboard queues that selected drive for the agent. On the next heartbeat, the EXE receives that request and starts a priority scan for that drive immediately. For large drives, the first batch is sent after the configured first-batch size, defaulting to 10 files, or after the configured interval, defaulting to about 1 second. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
+After the first heartbeat, that PC hostname appears under `Active Users` and in the sidebar under the Active Users button. As the agent scans, it uses the configured drive priority, defaulting to `D,C`, so `D:/` is preferred when available. All available drives start scanning immediately in parallel, so selecting another reported drive such as `C:/` can show early rows without waiting for `D:/` to finish. For large drives, the first batch is sent after the configured first-batch size, defaulting to 5 files, or after the configured interval, defaulting to about 0.25 seconds. The remaining files continue uploading in configurable batches, defaulting to 250 files, so the dashboard table appears quickly and the total count increases as scanning continues. Click a hostname/user card to switch the dashboard table, drive selector, storage card, file type distribution, and host/IP/MAC cards to that PC. The Windows agent watches drive changes, so when the user adds, edits, or deletes files, the changed drive is rescanned and the selected dashboard updates when the next batch reaches the server.
 
 When the admin clicks Download for a remote file, the dashboard queues that exact file for the selected agent. On the next heartbeat, the EXE reads the file from the selected drive, uploads it to the dashboard through `/agent-file-download/`, and the browser receives a normal file download. Temporary remote-download files are stored under `remote_downloads/` by default and are ignored by Git.
 
@@ -377,8 +377,8 @@ After the dashboard is deployed, build the one-file user executable with the pub
     -CountRefreshSeconds 60 `
     -FileBatchSize 250 `
     -DrivePriority "D,C" `
-    -FirstFileBatchSize 10 `
-    -FileBatchIntervalSeconds 1 `
+    -FirstFileBatchSize 5 `
+    -FileBatchIntervalSeconds 0.25 `
     -ChangeDebounceSeconds 1 `
     -LanDiscoveryEnabled $false
 ```
@@ -399,7 +399,7 @@ agent_download/DriveAgent.exe
 
 The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, a terminal opens briefly, the EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup for the current user, starts the background agent, and then closes. The background agent starts scanning and reports that PC to `Active Users`. Future Windows startup launches are hidden and do not leave a terminal open.
 
-During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` quickly while full file scanning continues in the background. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
+During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` within seconds while full file scanning continues in the background. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
 
 The installed EXE does not create `agent.log` or any text file by default. For debugging only, set `DRIVE_AGENT_LOG_FILE=1` or set `DRIVE_AGENT_LOG_FILE` to a full log path before running the agent.
 

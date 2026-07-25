@@ -13,9 +13,9 @@ param(
 
     [int]$FileBatchSize = 250,
 
-    [int]$FirstFileBatchSize = 10,
+    [int]$FirstFileBatchSize = 5,
 
-    [double]$FileBatchIntervalSeconds = 1,
+    [double]$FileBatchIntervalSeconds = 0.25,
 
     [int]$ChangeDebounceSeconds = 1,
 

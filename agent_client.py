@@ -38,8 +38,8 @@ FALLBACK_LAN_DISCOVERY_ENABLED = False
 DEFAULT_DISCOVERY_PORT = 8000
 LOCAL_DEFAULT_SERVER_URL = "http://127.0.0.1:8000/agent-heartbeat/"
 FALLBACK_DRIVE_PRIORITY = "D,C"
-FALLBACK_FIRST_FILE_BATCH_SIZE = 10
-FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 1
+FALLBACK_FIRST_FILE_BATCH_SIZE = 5
+FALLBACK_FILE_BATCH_INTERVAL_SECONDS = 0.25
 APP_DIRECTORY_NAME = "DriveAgent"
 RUN_REGISTRY_NAME = "DriveAgent"
 EXCLUDED_FOLDER_NAMES = {
@@ -934,9 +934,11 @@ class FileCountCache:
         self._condition = threading.Condition()
         self._requested_drive_values = set()
         self._stop_event = threading.Event()
+        self._skip_next_full_scan = True
         self._thread = threading.Thread(target=self._run, daemon=True)
 
     def start(self):
+        self._start_initial_drive_scans()
         self._thread.start()
 
     def stop(self):
@@ -1000,6 +1002,11 @@ class FileCountCache:
             daemon=True,
         )
         scan_thread.start()
+
+    def _start_initial_drive_scans(self):
+        for root in ordered_drive_roots(self.drive_priority):
+            self._start_priority_scan(root)
+            log_message(f"Started immediate scan for {drive_label(root)}.")
 
     def snapshot(self, value):
         with self._lock:
@@ -1161,11 +1168,14 @@ class FileCountCache:
         while not self._stop_event.is_set():
             roots = ordered_drive_roots(self.drive_priority)
 
-            for root in roots:
-                if self._stop_event.is_set():
-                    break
+            if self._skip_next_full_scan:
+                self._skip_next_full_scan = False
+            else:
+                for root in roots:
+                    if self._stop_event.is_set():
+                        break
 
-                self._run_drive_scan(root)
+                    self._run_drive_scan(root)
 
             next_full_scan_at = time.monotonic() + self.refresh_seconds
 
