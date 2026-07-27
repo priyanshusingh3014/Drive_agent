@@ -24,11 +24,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path(
         "login/",
-        auth_views.LoginView.as_view(
-            template_name="drivefiles/login.html",
-            redirect_authenticated_user=True,
-            extra_context={"auth_mode": "login", **drivefile_views.drive_context()},
-        ),
+        drivefile_views.AgentLoginView.as_view(),
         name="login",
     ),
     path("signup/", drivefile_views.signup, name="signup"),

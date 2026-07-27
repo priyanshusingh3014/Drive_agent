@@ -10,13 +10,16 @@ import uuid
 from collections import Counter
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LoginView
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
@@ -673,6 +676,24 @@ def _safe_redirect_target(request):
     return "drive_files"
 
 
+class AgentLoginView(LoginView):
+    template_name = "drivefiles/login.html"
+    redirect_authenticated_user = True
+    extra_context = {
+        "auth_mode": "login",
+        **drive_context(),
+    }
+
+    def get_initial(self):
+        initial = super().get_initial()
+        username = self.request.GET.get("username", "").strip()
+
+        if username:
+            initial["username"] = username
+
+        return initial
+
+
 def signup(request):
     if request.user.is_authenticated:
         return redirect("drive_files")
@@ -681,8 +702,18 @@ def signup(request):
         form = AgentSignupForm(request.POST)
 
         if form.is_valid():
-            form.save()
-            return redirect("login")
+            user = form.save()
+            query_params = {"username": user.get_username()}
+            redirect_target = request.POST.get("next") or request.GET.get("next")
+
+            if redirect_target and url_has_allowed_host_and_scheme(
+                redirect_target,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                query_params["next"] = redirect_target
+
+            return redirect(f"{reverse('login')}?{urlencode(query_params)}")
     else:
         form = AgentSignupForm()
 

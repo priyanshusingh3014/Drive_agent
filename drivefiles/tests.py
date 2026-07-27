@@ -122,7 +122,11 @@ class AuthFlowTests(TestCase):
             },
         )
 
-        self.assertRedirects(response, "/login/", fetch_redirect_response=False)
+        self.assertRedirects(
+            response,
+            "/login/?username=new-admin",
+            fetch_redirect_response=False,
+        )
         self.assertTrue(
             get_user_model().objects.filter(username="new-admin").exists()
         )
@@ -131,6 +135,20 @@ class AuthFlowTests(TestCase):
         dashboard_response = self.client.get("/")
         self.assertEqual(dashboard_response.status_code, 302)
         self.assertIn("/login/", dashboard_response["Location"])
+
+    def test_login_prefills_username_after_signup(self):
+        self.client.post(
+            "/signup/",
+            data={
+                "username": "prefilled-admin",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        response = self.client.get("/login/?username=prefilled-admin")
+
+        self.assertContains(response, 'value="prefilled-admin"')
 
 
 @override_settings(AGENT_API_TOKEN="test-token")
