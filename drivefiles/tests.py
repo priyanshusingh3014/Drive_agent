@@ -468,6 +468,30 @@ class ActiveAgentHeartbeatTests(TestCase):
             ["BETA-PC", "ALPHA-PC"],
         )
 
+    @override_settings(AGENT_ONLINE_SECONDS=15)
+    def test_active_agents_data_keeps_recent_heartbeat_visible(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        ActiveAgent.objects.create(
+            agent_id="jitter-pc",
+            host_name="JITTER-PC",
+            ip_address="192.168.1.46",
+        )
+        ActiveAgent.objects.filter(agent_id="jitter-pc").update(
+            last_seen_at=timezone.now() - timedelta(seconds=8),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get("/active-agents-data/")
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["total_agents"], 1)
+        self.assertEqual(data["online_agents"], 1)
+        self.assertEqual(data["agents"][0]["host_name"], "JITTER-PC")
+
     def test_agent_heartbeat_replaces_duplicate_same_pc_identity(self):
         user = get_user_model().objects.create_user(
             username="admin-user",

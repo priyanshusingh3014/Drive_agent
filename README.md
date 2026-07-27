@@ -285,7 +285,7 @@ DJANGO_SECURE_SSL_REDIRECT=True
 DJANGO_SECURE_HSTS_SECONDS=31536000
 DRIVE_AGENT_API_TOKEN=<same-secret-token-used-by-the-exe>
 DRIVE_AGENT_ENABLE_LOCAL_SCANNER=False
-DRIVE_AGENT_ONLINE_SECONDS=3
+DRIVE_AGENT_ONLINE_SECONDS=15
 DRIVE_AGENT_DEFAULT_DRIVE=D:/
 DRIVE_AGENT_DRIVE_PRIORITY=D
 DRIVE_AGENT_FILE_BATCH_SIZE=1000
@@ -297,7 +297,7 @@ DATABASE_URL=<postgres-database-url>
 
 On Render, use the PostgreSQL **internal database URL** for `DATABASE_URL` when the web service and database are in the same Render region. This is required for permanent usernames/passwords and agent data. The app now refuses to start on Render without `DATABASE_URL` so it cannot silently fall back to temporary SQLite.
 
-`DRIVE_AGENT_ONLINE_SECONDS` is capped at 3 seconds in code so ending the DriveAgent task hides that PC from Active Users quickly even if an older Render environment still has a larger value.
+`DRIVE_AGENT_ONLINE_SECONDS` has a 15 second minimum in code so normal internet or Render heartbeat delays do not make a running PC disappear and reappear in Active Users. Proper uninstall still removes the PC immediately through `/agent-uninstall/`.
 
 Signup users are stored in the database, not in the browser session. After a server restart, the project intentionally asks the admin to log in again, but the same username/password should still work. If you are forced to create a new username after each redeploy or restart, Render is not connected to the persistent PostgreSQL database.
 
@@ -404,9 +404,9 @@ agent_download/DriveAgent.exe
 
 The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, no terminal is shown. The EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup and Windows Installed Apps for the current user, starts or restarts the hidden background agent, and exits. The background agent keeps scanning silently and reports that PC to `Active Users`. Future Windows startup launches are hidden too.
 
-During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` within seconds while full file scanning continues in the background. If the DriveAgent process is ended, heartbeats stop and the PC is hidden from Active Users after the configured online window, defaulting to 3 seconds. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
+During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` within seconds while full file scanning continues in the background. If the DriveAgent process is ended, heartbeats stop and the PC is hidden from Active Users after the configured online window, defaulting to 15 seconds. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
 
-Active Users is sorted by hostname and agent id, not by the newest heartbeat, so users stay fixed in position while live heartbeats arrive. If an older agent build reports the same hostname and matching MAC or IP address under a different id, the server removes the older duplicate so one physical PC appears only once.
+Active Users is ordered by first-seen position and agent id, not by the newest heartbeat, so users stay fixed in position while live heartbeats arrive. If an older agent build reports the same hostname and matching MAC or IP address under a different id, the server removes the older duplicate so one physical PC appears only once.
 
 The installed EXE does not create `agent.log` or any text file by default. For debugging only, set `DRIVE_AGENT_LOG_FILE=1` or set `DRIVE_AGENT_LOG_FILE` to a full log path before running the agent.
 
@@ -469,7 +469,7 @@ $env:DRIVE_AGENT_ROOT = "E:/"
 - Reported PC default drive follows the configured drive priority.
 - Select a reported drive for the selected Active User and the file table, storage card, file type distribution, totals, and host/IP/MAC area update to that PC.
 - User agents send heartbeats every 1 second by default, watch Windows drive changes, and report changed drive data after additions, edits, and deletions.
-- Active Users shows only PCs that are currently heartbeating. If DriveAgent is ended, the PC is hidden after the configured heartbeat window, defaulting to 3 seconds.
+- Active Users shows PCs that are currently heartbeating within the stable heartbeat window, defaulting to 15 seconds. If DriveAgent is ended, the PC is hidden after that window; uninstall removes it immediately.
 - Active Users stays in stable hostname order and deduplicates repeated reports from the same hostname plus MAC or IP address.
 - User agents scan drives in the configured priority order, and selected remote drives are requested through heartbeat so the first batch appears quickly while the remaining drive data streams.
 - Uninstalling the DriveAgent user package removes that PC from Active Users.

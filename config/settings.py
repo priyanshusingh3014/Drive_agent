@@ -228,8 +228,8 @@ SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 SESSION_COOKIE_NAME = f"file_agent_session_{secrets.token_hex(8)}"
 AGENT_API_TOKEN = os.environ.get("DRIVE_AGENT_API_TOKEN", "drive-agent-local-token")
 AGENT_ONLINE_SECONDS = max(
-    1,
-    min(3, int(os.environ.get("DRIVE_AGENT_ONLINE_SECONDS", "3"))),
+    15,
+    min(60, int(os.environ.get("DRIVE_AGENT_ONLINE_SECONDS", "15"))),
 )
 AGENT_FILE_BATCH_SIZE = int(os.environ.get("DRIVE_AGENT_FILE_BATCH_SIZE", "1000"))
 AGENT_AUTO_SELECT_SINGLE_ACTIVE_AGENT = _env_bool(
