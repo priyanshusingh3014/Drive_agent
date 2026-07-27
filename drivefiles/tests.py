@@ -759,14 +759,14 @@ class ActiveAgentHeartbeatTests(TestCase):
             ip_address="192.168.1.91",
             mac_address="11:22:33:44:55:77",
             drive_count=2,
-            total_files=2,
+            total_files=10,
         )
         c_drive = ActiveAgentDrive.objects.create(
             agent=agent,
             label="C:\\",
             value="C:/",
-            total_files=1,
-            indexed_files=1,
+            total_files=9,
+            indexed_files=9,
             count_complete=True,
         )
         d_drive = ActiveAgentDrive.objects.create(
@@ -827,6 +827,8 @@ class ActiveAgentHeartbeatTests(TestCase):
             ["D:/", "E:/", "C:/"],
         )
         self.assertEqual(data["dashboard"]["drive_label"], "D:\\")
+        self.assertEqual(data["dashboard"]["total_files_display"], "1")
+        self.assertEqual(data["dashboard"]["processed_files_display"], "1")
         self.assertIn("D_File.txt", data["rows_html"])
         self.assertNotIn("C_File.txt", data["rows_html"])
 

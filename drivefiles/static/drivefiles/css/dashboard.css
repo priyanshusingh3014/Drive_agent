@@ -891,7 +891,7 @@
 
         .metric-strip {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             margin-top: 6px;
             overflow: hidden;
             border: 1px solid var(--line);
@@ -930,21 +930,6 @@
 
         .metric-number.red {
             color: #ff0000;
-        }
-
-        .metric-small {
-            color: var(--muted);
-            font-size: 10px;
-            font-weight: 800;
-            line-height: 1.2;
-        }
-
-        .last-scan {
-            display: grid;
-            grid-template-columns: 16px minmax(0, 1fr);
-            align-items: center;
-            gap: 4px;
-            text-align: left;
         }
 
         .system-card {
@@ -1699,7 +1684,6 @@
             .subtitle,
             .indexed-line,
             .metric-label,
-            .metric-small,
             .system-label,
             .system-sub,
             .sidebar-user-meta,

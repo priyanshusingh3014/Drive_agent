@@ -10,7 +10,7 @@
     >
 
     <title>{{ dashboard_title }}</title>
-    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260727-active-user-timeout">
+    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260727-selected-drive-metrics">
 </head>
 
 <body>
@@ -236,20 +236,6 @@
                         <div class="metric-cell">
                             <span class="metric-label">Failed</span>
                             <span class="metric-number red" data-failed-files>{{ failed_files_display }}</span>
-                        </div>
-
-                        <div class="metric-cell">
-                            <span class="metric-label">Last Scan</span>
-                            <span class="last-scan">
-                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <circle cx="12" cy="12" r="9"></circle>
-                                    <path d="M12 7v5l3 2"></path>
-                                </svg>
-                                <span class="metric-small">
-                                    <span data-last-scan-date>{{ last_scan_date_display }}</span><br>
-                                    <span data-last-scan-time>{{ last_scan_time_display }}</span>
-                                </span>
-                            </span>
                         </div>
                     </div>
                 </article>
@@ -688,18 +674,6 @@
 
             if (progressValueElement) {
                 progressValueElement.textContent = `${dashboard.progress_percent}%`;
-            }
-
-            if (document.querySelector("[data-last-scan-date]")) {
-                document.querySelector("[data-last-scan-date]").textContent = dashboard.last_scan_date_display;
-            }
-
-            if (document.querySelector("[data-last-scan-time]")) {
-                document.querySelector("[data-last-scan-time]").textContent = dashboard.last_scan_time_display;
-            }
-
-            if (document.querySelector("[data-last-seen]")) {
-                document.querySelector("[data-last-seen]").textContent = dashboard.last_scan_time_display;
             }
 
             if (donutElement) {
