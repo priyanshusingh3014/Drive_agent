@@ -1496,6 +1496,48 @@ def _drive_files_json_response(context, request=None, extra_payload=None):
     return JsonResponse(payload)
 
 
+def _files_only_json_response(context, request=None, extra_payload=None):
+    rows_html = render_to_string(
+        "drivefiles/_file_rows.html",
+        context,
+        request=request,
+    )
+
+    payload = {
+        "rows_html": rows_html,
+        "files_count": len(context["files"]),
+        "files_only": True,
+        "error_message": context["error_message"],
+        "maximum_reached": context["maximum_reached"],
+        "is_scanning": context["is_scanning"],
+        "last_scanned_display": context["last_scanned_display"],
+        "next_scan_display": context["next_scan_display"],
+        "sync_status_title": context["sync_status_title"],
+        "current_files_display": context["current_files_display"],
+        "version": context["version"],
+        "unchanged": False,
+        "selected_drive_value": context["selected_drive_value"],
+        "selected_agent_id": context.get("selected_agent_id", ""),
+        "selected_agent_host": context.get("selected_agent_host", ""),
+        "filter_type": context["filter_type"],
+        "pagination": {
+            "page_number": context["page_number"],
+            "total_pages": context["total_pages"],
+            "page_start_display": context["page_start_display"],
+            "page_end_display": context["page_end_display"],
+            "total_matching_display": context["total_matching_display"],
+            "pagination_pages": context["pagination_pages"],
+            "has_previous_page": context["has_previous_page"],
+            "has_next_page": context["has_next_page"],
+        },
+    }
+
+    if extra_payload:
+        payload.update(extra_payload)
+
+    return JsonResponse(payload)
+
+
 def _local_drive_scanner_enabled():
     return bool(getattr(settings, "LOCAL_DRIVE_SCANNER_ENABLED", True))
 
@@ -1718,6 +1760,77 @@ def _build_agent_files_context(request, selected_agent):
     }
 
 
+def _build_agent_files_only_context(request, selected_agent):
+    selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+    selected_drive = (
+        selected_agent.drive_reports.filter(value=selected_drive_value).first()
+        if selected_drive_value
+        else None
+    )
+    search_query = request.GET.get("search", "").strip()
+    filter_type = request.GET.get("type", "all").strip().lower()
+    page_number = _parse_positive_int(request.GET.get("page"), default=1)
+
+    if filter_type != "all" and filter_type not in FILE_TYPE_GROUP_BY_KEY:
+        filter_type = "all"
+
+    filtered_queryset = (
+        _remote_files_queryset(selected_drive, search_query, filter_type)
+        if selected_drive
+        else ActiveAgentFile.objects.none()
+    )
+    filtered_count = filtered_queryset.count()
+    pagination = _build_pagination_context(filtered_count, page_number)
+    page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
+    paged_files = [
+        _remote_file_to_dict(file_report)
+        for file_report in filtered_queryset.order_by(
+            "-freshness_timestamp",
+            "name",
+        ).only(
+            "name",
+            "folder",
+            "relative_path",
+            "extension",
+            "type_badge",
+            "type_class",
+            "type_label",
+            "size",
+            "size_bytes",
+            "modified_timestamp",
+            "freshness_timestamp",
+            "modified_display",
+        )[page_start_index:pagination["page_end"]]
+    ]
+    last_scan_source = (
+        selected_drive.last_reported_at
+        if selected_drive
+        else selected_agent.last_seen_at
+    )
+
+    return {
+        **pagination,
+        "files": paged_files,
+        "error_message": None,
+        "filter_type": filter_type,
+        "is_scanning": selected_drive is not None and not selected_drive.count_complete,
+        "last_scanned_display": _format_relative_time(last_scan_source),
+        "maximum_reached": False,
+        "next_scan_display": "Waiting for agent heartbeat",
+        "search_query": search_query,
+        "selected_drive_value": selected_drive_value,
+        "selected_agent_id": selected_agent.agent_id,
+        "selected_agent_host": selected_agent.host_name,
+        "current_files_display": _format_number(filtered_count),
+        "sync_status_title": (
+            "Remote Sync Complete"
+            if selected_drive and selected_drive.count_complete
+            else "Remote Sync Running"
+        ),
+        "version": _agent_drive_version(selected_agent, selected_drive),
+    }
+
+
 def _build_drive_files_context(request, selected_drive_root=None, scanner_ready=False):
     selected_agent = _get_selected_agent(request)
 
@@ -1772,19 +1885,40 @@ def _build_drive_files_context(request, selected_drive_root=None, scanner_ready=
     }
 
 
-def _version_shortcut_allowed(request):
-    if not request.GET.get("version"):
-        return False
-
+def _build_local_files_only_context(request, selected_drive_root):
     search_query = request.GET.get("search", "").strip()
     filter_type = request.GET.get("type", "all").strip().lower()
+    page_number = _parse_positive_int(request.GET.get("page"), default=1)
+    snapshot = get_file_snapshot(search_query)
+    filtered_files, filter_type = _filter_files(snapshot["files"], filter_type)
+    pagination = _build_pagination_context(len(filtered_files), page_number)
+    page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
+    paged_files = filtered_files[page_start_index:pagination["page_end"]]
 
-    return not request.GET.get("page") and not search_query and filter_type in {"", "all"}
+    return {
+        **snapshot,
+        **pagination,
+        "files": paged_files,
+        "filter_type": filter_type,
+        "search_query": search_query,
+        "selected_drive_value": drive_root_to_value(selected_drive_root),
+        "current_files_display": _format_number(len(filtered_files)),
+        "sync_status_title": "Sync Running" if snapshot["is_scanning"] else "Sync Complete",
+    }
+
+
+def _version_shortcut_allowed(request):
+    return bool(request.GET.get("version")) and request.GET.get("unchanged_ok") == "1"
+
+
+def _files_only_requested(request):
+    return request.GET.get("scope") == "files"
 
 
 @login_required
 def drive_files_data(request):
     selected_agent = _get_selected_agent(request)
+    files_only = _files_only_requested(request)
 
     if selected_agent:
         selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
@@ -1815,6 +1949,11 @@ def drive_files_data(request):
                 }
             )
 
+        if files_only:
+            context = _build_agent_files_only_context(request, selected_agent)
+
+            return _files_only_json_response(context, request=request)
+
         context = _build_agent_files_context(request, selected_agent)
 
         return _drive_files_json_response(context, request=request)
@@ -1844,6 +1983,11 @@ def drive_files_data(request):
                 "sync_status_title": "Sync Running" if scan_metadata["is_scanning"] else "Sync Complete",
             }
         )
+
+    if files_only:
+        context = _build_local_files_only_context(request, selected_drive_root)
+
+        return _files_only_json_response(context, request=request)
 
     context = _build_drive_files_context(
         request,

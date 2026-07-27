@@ -530,6 +530,7 @@
         let refreshRequestController = null;
         let refreshRequestSequence = 0;
         let refreshRequestInFlight = false;
+        let searchRefreshTimer = null;
         let idleLogoutTimer = null;
         let lastActivityResetAt = 0;
         let scanRequestInFlight = false;
@@ -550,6 +551,7 @@
         }
 
         function clearSearchInputs() {
+            window.clearTimeout(searchRefreshTimer);
             searchInputs.forEach(function (input) {
                 input.value = "";
             });
@@ -866,14 +868,36 @@
             errorElement.textContent = data.error_message || "";
             errorElement.hidden = !data.error_message;
             updateDashboard(data.dashboard);
+
+            if (!data.dashboard && data.current_files_display && currentFilesElement) {
+                currentFilesElement.textContent = `${data.current_files_display} files`;
+            }
+
             renderPagination(data.pagination);
             renderDriveOptions(data.drive_options, data.selected_drive_value);
-            renderActiveAgents(data);
+
+            if (
+                Object.prototype.hasOwnProperty.call(data, "active_agents")
+                || Object.prototype.hasOwnProperty.call(data, "agents")
+            ) {
+                renderActiveAgents(data);
+            }
+
             updateFilterButtons();
             lastRenderedVersion = data.version;
             lastRenderedQuery = currentQuery;
             lastRenderedPage = currentPage;
             lastRenderedFilter = activeFilter;
+        }
+
+        function scheduleFilesOnlyRefresh(delayMs = 90) {
+            window.clearTimeout(searchRefreshTimer);
+            searchRefreshTimer = window.setTimeout(function () {
+                refreshFiles({
+                    filesOnly: true,
+                    force: true,
+                });
+            }, delayMs);
         }
 
         async function selectAgent(agentId) {
@@ -922,6 +946,7 @@
 
         async function refreshFiles(options = {}) {
             const isPriorityRefresh = Boolean(options.force);
+            const filesOnly = Boolean(options.filesOnly);
 
             if (refreshRequestInFlight && !isPriorityRefresh) {
                 return;
@@ -929,6 +954,10 @@
 
             const currentQuery = getSearchQuery();
             const params = new URLSearchParams();
+
+            if (filesOnly) {
+                params.set("scope", "files");
+            }
 
             if (currentQuery) {
                 params.set("search", currentQuery);
@@ -950,6 +979,7 @@
                 && lastRenderedVersion !== null
             ) {
                 params.set("version", lastRenderedVersion);
+                params.set("unchanged_ok", "1");
             }
 
             const requestUrl = params.toString()
@@ -1143,7 +1173,7 @@
             input.addEventListener("input", function () {
                 activeSearchInput = input;
                 currentPage = 1;
-                refreshFiles({ force: true });
+                scheduleFilesOnlyRefresh();
             });
         });
 
@@ -1153,7 +1183,11 @@
                 activeSearchInput = form.querySelector("[data-search-input]") || activeSearchInput;
                 currentPage = 1;
                 resetIdleLogoutTimer();
-                refreshFiles({ force: true });
+                window.clearTimeout(searchRefreshTimer);
+                refreshFiles({
+                    filesOnly: true,
+                    force: true,
+                });
             });
         });
 
@@ -1237,7 +1271,10 @@
                 }
 
                 resetIdleLogoutTimer();
-                refreshFiles({ force: true });
+                refreshFiles({
+                    filesOnly: true,
+                    force: true,
+                });
             });
         }
 
@@ -1255,7 +1292,10 @@
                 closeMenus();
                 resetIdleLogoutTimer();
                 updateFilterButtons();
-                refreshFiles({ force: true });
+                refreshFiles({
+                    filesOnly: true,
+                    force: true,
+                });
             });
         });
 
@@ -1292,7 +1332,11 @@
         resetIdleLogoutTimer();
         applyInitialDynamicStyles();
         updateFilterButtons();
-        window.setInterval(refreshFiles, refreshIntervalMs);
+        window.setInterval(function () {
+            refreshFiles({
+                filesOnly: Boolean(getSearchQuery() || activeFilter !== "all" || currentPage > 1),
+            });
+        }, refreshIntervalMs);
         window.setInterval(refreshActiveAgents, activeAgentsRefreshIntervalMs);
     })();
 </script>

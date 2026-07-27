@@ -1221,6 +1221,121 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertNotIn("Meeting_Notes.PDF", images_data["rows_html"])
         self.assertNotIn("Backup.ZIP", images_data["rows_html"])
 
+    def test_files_only_search_returns_matching_rows_without_dashboard_payload(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-fast-search",
+            host_name="FAST-SEARCH-PC",
+            ip_address="192.168.1.97",
+            drive_count=1,
+            total_files=3,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=3,
+            indexed_files=3,
+            count_complete=True,
+        )
+
+        for index, name in enumerate(
+            ["Budget_Report.pdf", "Budget_Notes.docx", "Team_Photo.jpg"]
+        ):
+            extension = f".{name.rsplit('.', 1)[-1]}"
+            type_class = "image" if extension == ".jpg" else "document"
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=name,
+                folder="D:\\Search",
+                relative_path=f"Search\\{name}",
+                extension=extension,
+                type_badge="FILE",
+                type_class=type_class,
+                type_label=extension.strip(".").upper(),
+                size="1 KB",
+                size_bytes=1024,
+                freshness_timestamp=index,
+            )
+
+        self.client.force_login(user)
+        self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-fast-search"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        response = self.client.get(
+            "/files-data/",
+            data={"scope": "files", "search": "Budget"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(data["files_only"])
+        self.assertNotIn("dashboard", data)
+        self.assertNotIn("active_agents", data)
+        self.assertNotIn("drive_options", data)
+        self.assertEqual(data["pagination"]["total_matching_display"], "2")
+        self.assertEqual(data["current_files_display"], "2")
+        self.assertIn("Budget_Report.pdf", data["rows_html"])
+        self.assertIn("Budget_Notes.docx", data["rows_html"])
+        self.assertNotIn("Team_Photo.jpg", data["rows_html"])
+
+    def test_files_only_refresh_can_skip_unchanged_search_results(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-fast-unchanged",
+            host_name="FAST-UNCHANGED-PC",
+            ip_address="192.168.1.98",
+            drive_count=1,
+            total_files=1,
+        )
+        ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+
+        self.client.force_login(user)
+        self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-fast-unchanged"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        first_response = self.client.get(
+            "/files-data/",
+            data={"scope": "files", "search": "anything"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        first_data = first_response.json()
+        second_response = self.client.get(
+            "/files-data/",
+            data={
+                "scope": "files",
+                "search": "anything",
+                "version": first_data["version"],
+                "unchanged_ok": "1",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        second_data = second_response.json()
+
+        self.assertEqual(second_response.status_code, 200)
+        self.assertTrue(second_data["unchanged"])
+        self.assertNotIn("rows_html", second_data)
+
     def test_selecting_remote_drive_queues_priority_scan_for_agent(self):
         user = get_user_model().objects.create_user(
             username="admin-user",

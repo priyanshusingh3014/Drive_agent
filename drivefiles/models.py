@@ -75,7 +75,15 @@ class ActiveAgentFile(models.Model):
             models.Index(fields=("drive", "-freshness_timestamp")),
             models.Index(fields=("drive", "-freshness_timestamp", "name")),
             models.Index(fields=("drive", "type_class")),
+            models.Index(
+                fields=("drive", "type_class", "-freshness_timestamp", "name"),
+                name="df_file_type_fast_idx",
+            ),
             models.Index(fields=("drive", "extension")),
+            models.Index(
+                fields=("drive", "extension", "-freshness_timestamp", "name"),
+                name="df_file_ext_fast_idx",
+            ),
         )
         ordering = ("-freshness_timestamp", "name")
         unique_together = (("drive", "relative_path"),)
