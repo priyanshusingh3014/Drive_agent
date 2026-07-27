@@ -1562,14 +1562,14 @@ class ActiveAgentHeartbeatTests(TestCase):
             host_name="SCROLL-PC",
             ip_address="192.168.1.106",
             drive_count=1,
-            total_files=145,
+            total_files=1105,
         )
         drive = ActiveAgentDrive.objects.create(
             agent=agent,
             label="D:\\",
             value="D:/",
-            total_files=145,
-            indexed_files=145,
+            total_files=1105,
+            indexed_files=1105,
             count_complete=True,
         )
 
@@ -1588,7 +1588,7 @@ class ActiveAgentHeartbeatTests(TestCase):
                 size_bytes=1024,
                 freshness_timestamp=index,
             )
-            for index in range(145)
+            for index in range(1105)
         )
 
         self.client.force_login(user)
@@ -1599,22 +1599,21 @@ class ActiveAgentHeartbeatTests(TestCase):
                 "drive_root": "D:/",
                 "scope": "files",
                 "offset": 10,
-                "limit": 120,
             },
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         data = response.json()
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(data["files_count"], 120)
+        self.assertEqual(data["files_count"], 1000)
         self.assertEqual(data["scroll"]["start_display"], "11")
-        self.assertEqual(data["scroll"]["end_display"], "130")
-        self.assertEqual(data["scroll"]["next_offset"], 130)
+        self.assertEqual(data["scroll"]["end_display"], "1,010")
+        self.assertEqual(data["scroll"]["next_offset"], 1010)
         self.assertTrue(data["scroll"]["has_more"])
-        self.assertIn("Batch_File_134.txt", data["rows_html"])
-        self.assertIn("Batch_File_015.txt", data["rows_html"])
-        self.assertNotIn("Batch_File_144.txt", data["rows_html"])
-        self.assertNotIn("Batch_File_014.txt", data["rows_html"])
+        self.assertIn("Batch_File_1094.txt", data["rows_html"])
+        self.assertIn("Batch_File_095.txt", data["rows_html"])
+        self.assertNotIn("Batch_File_1104.txt", data["rows_html"])
+        self.assertNotIn("Batch_File_094.txt", data["rows_html"])
 
     def test_remote_agent_file_pagination_uses_explicit_agent_without_session(self):
         user = get_user_model().objects.create_user(

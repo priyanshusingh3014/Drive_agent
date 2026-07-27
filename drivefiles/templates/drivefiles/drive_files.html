@@ -10,7 +10,7 @@
     >
 
     <title>{{ dashboard_title }}</title>
-    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260728-fast-scroll">
+    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260728-fast-scroll-1000">
 </head>
 
 <body>
@@ -473,7 +473,7 @@
         const refreshIntervalMs = {{ refresh_interval_ms }};
         const activeAgentsRefreshIntervalMs = {{ active_agents_refresh_interval_ms }};
         const idleLogoutMs = 60 * 1000;
-        const scrollBatchSize = 120;
+        const scrollBatchSize = 1000;
         const dataUrl = "{% url 'drive_files_data' %}";
         const activeAgentsUrl = "{% url 'active_agents_data' %}";
         const selectAgentUrl = "{% url 'select_agent' %}";
