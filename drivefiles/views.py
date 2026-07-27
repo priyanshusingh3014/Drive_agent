@@ -1749,6 +1749,16 @@ def _build_drive_files_context(request, selected_drive_root=None, scanner_ready=
     }
 
 
+def _version_shortcut_allowed(request):
+    if not request.GET.get("version"):
+        return False
+
+    search_query = request.GET.get("search", "").strip()
+    filter_type = request.GET.get("type", "all").strip().lower()
+
+    return not request.GET.get("page") and not search_query and filter_type in {"", "all"}
+
+
 @login_required
 def drive_files_data(request):
     selected_agent = _get_selected_agent(request)
@@ -1761,7 +1771,11 @@ def drive_files_data(request):
             else None
         )
         remote_version = _agent_drive_version(selected_agent, selected_drive)
-        client_version = request.GET.get("version")
+        client_version = (
+            request.GET.get("version")
+            if _version_shortcut_allowed(request)
+            else None
+        )
 
         if client_version and client_version == str(remote_version):
             return JsonResponse(
@@ -1791,7 +1805,11 @@ def drive_files_data(request):
     set_drive_root(selected_drive_root)
     start_background_scanner()
     scan_metadata = get_scan_metadata()
-    client_version = request.GET.get("version")
+    client_version = (
+        request.GET.get("version")
+        if _version_shortcut_allowed(request)
+        else None
+    )
 
     if client_version and client_version == str(scan_metadata["version"]):
         return JsonResponse(

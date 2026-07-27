@@ -936,7 +936,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertIn("D_File.txt", data["rows_html"])
         self.assertNotIn("C_File.txt", data["rows_html"])
 
-    def test_remote_agent_file_pagination_returns_next_page(self):
+    def test_remote_agent_file_pagination_returns_next_ten_files(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -946,18 +946,18 @@ class ActiveAgentHeartbeatTests(TestCase):
             host_name="PAGE-PC",
             ip_address="192.168.1.94",
             drive_count=1,
-            total_files=12,
+            total_files=25,
         )
         drive = ActiveAgentDrive.objects.create(
             agent=agent,
             label="D:\\",
             value="D:/",
-            total_files=12,
-            indexed_files=12,
+            total_files=25,
+            indexed_files=25,
             count_complete=True,
         )
 
-        for index in range(12):
+        for index in range(25):
             ActiveAgentFile.objects.create(
                 agent=agent,
                 drive=drive,
@@ -980,21 +980,26 @@ class ActiveAgentHeartbeatTests(TestCase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         self.assertEqual(select_response.status_code, 200)
+        selected_data = select_response.json()
 
         response = self.client.get(
             "/files-data/",
-            data={"page": 2},
+            data={"page": 2, "version": selected_data["version"]},
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         data = response.json()
 
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(data.get("unchanged", False))
         self.assertEqual(data["pagination"]["page_number"], 2)
         self.assertEqual(data["pagination"]["page_start_display"], "11")
-        self.assertEqual(data["pagination"]["page_end_display"], "12")
-        self.assertIn("D_File_01.txt", data["rows_html"])
-        self.assertIn("D_File_00.txt", data["rows_html"])
-        self.assertNotIn("D_File_11.txt", data["rows_html"])
+        self.assertEqual(data["pagination"]["page_end_display"], "20")
+
+        for index in range(5, 15):
+            self.assertIn(f"D_File_{index:02d}.txt", data["rows_html"])
+
+        self.assertNotIn("D_File_24.txt", data["rows_html"])
+        self.assertNotIn("D_File_04.txt", data["rows_html"])
 
     def test_selecting_remote_drive_queues_priority_scan_for_agent(self):
         user = get_user_model().objects.create_user(

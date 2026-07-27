@@ -526,6 +526,7 @@
         let lastRenderedFilter = activeFilter;
         let refreshRequestController = null;
         let refreshRequestSequence = 0;
+        let refreshRequestInFlight = false;
         let idleLogoutTimer = null;
         let lastActivityResetAt = 0;
         let scanRequestInFlight = false;
@@ -906,8 +907,13 @@
         }
 
         async function refreshFiles(options = {}) {
+            const isPriorityRefresh = Boolean(options.force);
+
+            if (refreshRequestInFlight && !isPriorityRefresh) {
+                return;
+            }
+
             const currentQuery = getSearchQuery();
-            const requestSequence = ++refreshRequestSequence;
             const params = new URLSearchParams();
 
             if (currentQuery) {
@@ -935,13 +941,18 @@
             const requestUrl = params.toString()
                 ? `${dataUrl}?${params.toString()}`
                 : dataUrl;
+            let requestSequence = 0;
 
             try {
-                if (refreshRequestController) {
+                if (refreshRequestController && isPriorityRefresh) {
                     refreshRequestController.abort();
+                } else if (refreshRequestController) {
+                    return;
                 }
 
+                requestSequence = ++refreshRequestSequence;
                 refreshRequestController = new AbortController();
+                refreshRequestInFlight = true;
 
                 const response = await fetch(requestUrl, {
                     signal: refreshRequestController.signal,
@@ -980,8 +991,9 @@
 
                 console.error("Unable to refresh files.", error);
             } finally {
-                if (requestSequence === refreshRequestSequence) {
+                if (requestSequence && requestSequence === refreshRequestSequence) {
                     refreshRequestController = null;
+                    refreshRequestInFlight = false;
                 }
             }
         }
