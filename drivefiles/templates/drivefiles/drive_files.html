@@ -1296,6 +1296,16 @@
             }, delayMs);
         }
 
+        function resetFileListingForSearch() {
+            currentPage = 1;
+            lastRenderedVersion = null;
+            lastRenderedQuery = "";
+            lastRenderedPage = 1;
+            lastRenderedFilter = activeFilter;
+            scrollLoadedPage = 1;
+            scrollNextPage = null;
+        }
+
         async function selectAgent(agentId) {
             resetIdleLogoutTimer();
             closeMenus();
@@ -1669,8 +1679,10 @@
         searchInputs.forEach(function (input) {
             input.addEventListener("input", function () {
                 activeSearchInput = input;
-                currentPage = 1;
-                scheduleFilesOnlyRefresh();
+                resetFileListingForSearch();
+                cancelRefreshRequest();
+                setRowsBusy(true);
+                scheduleFilesOnlyRefresh(60);
             });
         });
 
@@ -1678,7 +1690,7 @@
             form.addEventListener("submit", function (event) {
                 event.preventDefault();
                 activeSearchInput = form.querySelector("[data-search-input]") || activeSearchInput;
-                currentPage = 1;
+                resetFileListingForSearch();
                 resetIdleLogoutTimer();
                 window.clearTimeout(searchRefreshTimer);
                 refreshFiles({

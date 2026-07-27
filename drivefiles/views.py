@@ -724,6 +724,14 @@ def _queue_agent_drive_scan(agent, drive_value):
         return
 
     latest_payload = agent.latest_payload if isinstance(agent.latest_payload, dict) else {}
+    requested_values = _normalize_requested_drive_values(
+        latest_payload.get("requested_drive_values"),
+        [requested_drive_value],
+    )
+
+    if requested_values == [requested_drive_value]:
+        return
+
     latest_payload["requested_drive_values"] = [requested_drive_value]
     agent.latest_payload = latest_payload
     agent.save(update_fields=("latest_payload",))
@@ -2033,6 +2041,11 @@ def drive_files_data(request):
             requested_drive_value=requested_drive_value,
             persist_session=False,
         )
+        search_query = request.GET.get("search", "").strip()
+
+        if search_query and selected_drive_value:
+            _queue_agent_drive_scan(selected_agent, selected_drive_value)
+
         selected_drive = (
             selected_agent.drive_reports.filter(value=selected_drive_value).first()
             if selected_drive_value

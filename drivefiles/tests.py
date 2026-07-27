@@ -1804,6 +1804,43 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertIn("Budget_Notes.docx", data["rows_html"])
         self.assertNotIn("Team_Photo.jpg", data["rows_html"])
 
+    def test_files_only_remote_search_queues_selected_drive_scan(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-live-search",
+            host_name="LIVE-SEARCH-PC",
+            ip_address="192.168.1.99",
+            drive_count=1,
+            total_files=0,
+            latest_payload={},
+        )
+        ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=0,
+            indexed_files=0,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/files-data/",
+            data={
+                "agent_id": "remote-pc-live-search",
+                "drive_root": "D:/",
+                "scope": "files",
+                "search": "Quarterly Plan",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        agent.refresh_from_db()
+        self.assertEqual(agent.latest_payload["requested_drive_values"], ["D:/"])
+
     def test_files_only_refresh_can_skip_unchanged_search_results(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
