@@ -1,8 +1,9 @@
 services:
   - type: web
-    name: drive-agent-dashboard
+    name: Drive_agent-1
     runtime: python
     plan: free
+    region: virginia
     buildCommand: bash build.sh
     startCommand: bash start.sh
     healthCheckPath: /agent-ping/
@@ -43,3 +44,4 @@ services:
 databases:
   - name: drive-agent-db
     plan: free
+    region: virginia

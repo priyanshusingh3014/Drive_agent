@@ -229,16 +229,30 @@ render.yaml
 
 ### Render Blueprint Deployment
 
-The fastest Render setup is to use the included `render.yaml`.
+The most stable Render setup is to use the included `render.yaml`. This avoids manually pasting `DATABASE_URL`, which is the main reason the PostgreSQL hostname becomes stale or invalid.
 
 1. Push this project to GitHub.
 2. In Render, open **Blueprints**.
-3. Create a new Blueprint from this repository.
+3. Create or sync a Blueprint from this repository.
 4. Render will create:
-   - `drive-agent-dashboard` web service
+   - `Drive_agent-1` web service
    - `drive-agent-db` PostgreSQL database
-5. Wait for the deploy to finish.
-6. Open the generated `.onrender.com` dashboard URL.
+5. Render will set `DATABASE_URL` automatically from `drive-agent-db`.
+6. Wait for the deploy to finish.
+7. Open the generated `.onrender.com` dashboard URL.
+
+The Blueprint pins both the web service and database to `virginia`, so Render's internal database hostname resolves correctly on the private network.
+
+If you already created `Drive_agent-1` manually, a normal **Deploy latest commit** will not repair a wrong manually pasted `DATABASE_URL`. Use **Blueprint sync** so Render applies:
+
+```yaml
+DATABASE_URL:
+  fromDatabase:
+    name: drive-agent-db
+    property: connectionString
+```
+
+After the Blueprint sync, do not manually edit `DATABASE_URL` unless you copy the fresh internal database URL from the same Render PostgreSQL service.
 
 The Blueprint uses:
 
@@ -295,7 +309,7 @@ WEB_CONCURRENCY=1
 DATABASE_URL=<postgres-database-url>
 ```
 
-On Render, use the PostgreSQL **internal database URL** for `DATABASE_URL` when the web service and database are in the same Render region. This is required for permanent usernames/passwords and agent data. The app now refuses to start on Render without `DATABASE_URL` so it cannot silently fall back to temporary SQLite.
+On Render, use the PostgreSQL **internal database URL** for `DATABASE_URL` when the web service and database are in the same Render region. The Blueprint handles this automatically with `fromDatabase`, which is safer than copy-paste. This is required for permanent usernames/passwords and agent data. The app now refuses to start on Render without `DATABASE_URL` so it cannot silently fall back to temporary SQLite.
 
 `DRIVE_AGENT_ONLINE_SECONDS` has a 15 second minimum in code so normal internet or Render heartbeat delays do not make a running PC disappear and reappear in Active Users. Proper uninstall still removes the PC immediately through `/agent-uninstall/`.
 
