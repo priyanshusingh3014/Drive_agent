@@ -360,7 +360,7 @@
                         </div>
                     </div>
 
-                    <div class="table-wrap">
+                    <div class="table-wrap" data-file-scroll tabindex="0">
                         <table>
                             <thead>
                                 <tr>
@@ -481,6 +481,7 @@
         const app = document.querySelector(".app");
         const searchForms = Array.from(document.querySelectorAll("[data-search-form]"));
         const searchInputs = Array.from(document.querySelectorAll("[data-search-input]"));
+        const tableScrollElement = document.querySelector("[data-file-scroll]");
         const rowsElement = document.querySelector("[data-file-rows]");
         const errorElement = document.querySelector("[data-error-message]");
         const scanStatusTextElement = document.querySelector("[data-sync-title]");
@@ -533,6 +534,13 @@
         let refreshRequestController = null;
         let refreshRequestSequence = 0;
         let refreshRequestInFlight = false;
+        let scrollPageRequestController = null;
+        let scrollPageInFlight = false;
+        let scrollFramePending = false;
+        let scrollNextPage = {{ has_next_page|yesno:"true,false" }} ? currentPage + 1 : null;
+        let scrollLoadedStartDisplay = "{{ page_start_display|escapejs }}";
+        let scrollLoadedEndDisplay = "{{ page_end_display|escapejs }}";
+        let scrollTotalDisplay = "{{ total_matching_display|escapejs }}";
         let searchRefreshTimer = null;
         let dashboardActionInFlight = false;
         let dashboardActionSequence = 0;
@@ -852,6 +860,177 @@
             }
         }
 
+        function updateScrollSummary() {
+            if (pageSummaryElement) {
+                pageSummaryElement.textContent = `Showing ${scrollLoadedStartDisplay} to ${scrollLoadedEndDisplay} of ${scrollTotalDisplay} files`;
+            }
+        }
+
+        function resetScrollState(pagination, shouldResetPosition = true) {
+            if (!pagination) {
+                return;
+            }
+
+            scrollLoadedStartDisplay = pagination.page_start_display;
+            scrollLoadedEndDisplay = pagination.page_end_display;
+            scrollTotalDisplay = pagination.total_matching_display;
+            scrollNextPage = pagination.has_next_page ? pagination.page_number + 1 : null;
+            updateScrollSummary();
+
+            if (tableScrollElement && shouldResetPosition) {
+                tableScrollElement.scrollTo({
+                    top: 0,
+                    behavior: "auto",
+                });
+            }
+
+            window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
+        }
+
+        function fileScrollNearBottom() {
+            if (!tableScrollElement) {
+                return false;
+            }
+
+            const remainingDistance = tableScrollElement.scrollHeight
+                - tableScrollElement.scrollTop
+                - tableScrollElement.clientHeight;
+
+            return remainingDistance < 90;
+        }
+
+        function fileScrollNeedsRows() {
+            return Boolean(
+                tableScrollElement
+                && scrollNextPage
+                && tableScrollElement.scrollHeight <= tableScrollElement.clientHeight + 4
+            );
+        }
+
+        function appendFilesPayload(data, currentQuery) {
+            if (!payloadBelongsToCurrentSelection(data) || !data.pagination) {
+                setRowsBusy(false);
+                return false;
+            }
+
+            if (data.rows_html) {
+                const existingEmptyState = rowsElement.querySelector(".empty-state");
+
+                if (existingEmptyState) {
+                    rowsElement.innerHTML = data.rows_html;
+                } else {
+                    rowsElement.insertAdjacentHTML("beforeend", data.rows_html);
+                }
+            }
+
+            scrollLoadedEndDisplay = data.pagination.page_end_display;
+            scrollTotalDisplay = data.pagination.total_matching_display;
+            scrollNextPage = data.pagination.has_next_page
+                ? data.pagination.page_number + 1
+                : null;
+            updateScrollSummary();
+
+            if (!data.dashboard && data.current_files_display && currentFilesElement) {
+                currentFilesElement.textContent = `${data.current_files_display} files`;
+            }
+
+            lastRenderedVersion = data.version;
+            lastRenderedQuery = currentQuery;
+            lastRenderedFilter = activeFilter;
+            return true;
+        }
+
+        async function loadNextScrollPage() {
+            if (!scrollNextPage || scrollPageInFlight || refreshRequestInFlight || dashboardActionInFlight) {
+                return;
+            }
+
+            const currentQuery = getSearchQuery();
+            const requestedFilter = activeFilter;
+            const requestedAgentId = selectedAgentId;
+            const requestedDriveValue = currentDriveValue();
+            const params = new URLSearchParams();
+            appendDashboardSelectionParams(params);
+            params.set("scope", "files");
+            params.set("page", scrollNextPage);
+
+            if (currentQuery) {
+                params.set("search", currentQuery);
+            }
+
+            if (activeFilter !== "all") {
+                params.set("type", activeFilter);
+            }
+
+            const requestUrl = `${dataUrl}?${params.toString()}`;
+            scrollPageRequestController = new AbortController();
+            scrollPageInFlight = true;
+
+            if (tableScrollElement) {
+                tableScrollElement.classList.add("loading-more");
+            }
+
+            try {
+                const response = await fetch(requestUrl, {
+                    signal: scrollPageRequestController.signal,
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (
+                    !data.unchanged
+                    && currentQuery === getSearchQuery()
+                    && requestedFilter === activeFilter
+                    && requestedAgentId === selectedAgentId
+                    && requestedDriveValue === currentDriveValue()
+                ) {
+                    appendFilesPayload(data, currentQuery);
+                }
+            } catch (error) {
+                if (error.name !== "AbortError") {
+                    console.error("Unable to load more files.", error);
+                }
+            } finally {
+                scrollPageInFlight = false;
+                scrollPageRequestController = null;
+
+                if (tableScrollElement) {
+                    tableScrollElement.classList.remove("loading-more");
+                }
+
+                window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
+            }
+        }
+
+        function loadNextPageIfScrollNeedsRows() {
+            if (fileScrollNeedsRows()) {
+                loadNextScrollPage();
+            }
+        }
+
+        function handleFileScroll() {
+            if (scrollFramePending) {
+                return;
+            }
+
+            scrollFramePending = true;
+
+            window.requestAnimationFrame(function () {
+                scrollFramePending = false;
+
+                if (fileScrollNearBottom()) {
+                    loadNextScrollPage();
+                }
+            });
+        }
+
         function cancelRefreshRequest() {
             window.clearTimeout(searchRefreshTimer);
 
@@ -860,8 +1039,14 @@
                 refreshRequestController = null;
             }
 
+            if (scrollPageRequestController) {
+                scrollPageRequestController.abort();
+                scrollPageRequestController = null;
+            }
+
             refreshRequestSequence += 1;
             refreshRequestInFlight = false;
+            scrollPageInFlight = false;
         }
 
         function updateActiveAgentSelection() {
@@ -1029,6 +1214,7 @@
             }
 
             renderPagination(data.pagination);
+            resetScrollState(data.pagination);
             renderDriveOptions(data.drive_options, data.selected_drive_value);
 
             if (
@@ -1134,6 +1320,10 @@
                 return;
             }
 
+            if (scrollPageInFlight && !isPriorityRefresh) {
+                return;
+            }
+
             if (refreshRequestInFlight && !isPriorityRefresh) {
                 return;
             }
@@ -1175,6 +1365,12 @@
             let requestSequence = 0;
 
             try {
+                if (scrollPageRequestController && isPriorityRefresh) {
+                    scrollPageRequestController.abort();
+                    scrollPageRequestController = null;
+                    scrollPageInFlight = false;
+                }
+
                 if (refreshRequestController && isPriorityRefresh) {
                     refreshRequestController.abort();
                 } else if (refreshRequestController) {
@@ -1520,6 +1716,12 @@
             });
         }
 
+        if (tableScrollElement) {
+            tableScrollElement.addEventListener("scroll", handleFileScroll, {
+                passive: true,
+            });
+        }
+
         if (filterToggle) {
             filterToggle.addEventListener("click", function () {
                 toggleMenu(filterMenu);
@@ -1574,6 +1776,7 @@
         resetIdleLogoutTimer();
         applyInitialDynamicStyles();
         updateFilterButtons();
+        window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
         window.setInterval(function () {
             refreshFiles({
                 filesOnly: Boolean(getSearchQuery() || activeFilter !== "all" || currentPage > 1),

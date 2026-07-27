@@ -1126,8 +1126,36 @@
 
         .table-wrap {
             min-height: 0;
-            overflow-x: auto;
-            overflow-y: hidden;
+            overflow: auto;
+            scrollbar-gutter: stable;
+            scrollbar-width: thin;
+            scrollbar-color: #9db4d4 #edf3fb;
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
+        }
+
+        .table-wrap::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        .table-wrap::-webkit-scrollbar-track {
+            background: #edf3fb;
+            border-radius: 999px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb {
+            background: linear-gradient(180deg, #8fb2e8 0%, #055ff0 100%);
+            border: 2px solid #edf3fb;
+            border-radius: 999px;
+        }
+
+        .table-wrap::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #6c9ce4 0%, #044fca 100%);
+        }
+
+        .table-wrap.loading-more {
+            scroll-behavior: auto;
         }
 
         table {
@@ -1168,6 +1196,9 @@
         }
 
         th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
             color: #273653;
             background: #f7f9fc;
             font-size: 12px;
