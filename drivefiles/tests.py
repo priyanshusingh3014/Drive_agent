@@ -782,6 +782,159 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertTrue(drive.count_complete)
         self.assertEqual(file_report.name, "Remote_Report.pdf")
 
+    def test_agent_file_events_add_new_remote_file_at_top(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-events-add",
+            host_name="EVENTS-PC",
+            ip_address="192.168.1.82",
+            drive_count=1,
+            total_files=1,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=drive,
+            name="Old_File.txt",
+            folder="D:\\Work",
+            relative_path="Work\\Old_File.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+            freshness_timestamp=1000,
+        )
+
+        response = self.client.post(
+            "/agent-file-events/",
+            data={
+                "agent_id": "remote-pc-events-add",
+                "host_name": "EVENTS-PC",
+                "drive_label": "D:\\",
+                "drive_value": "D:/",
+                "index_ready": True,
+                "upsert_files": [
+                    {
+                        "name": "New_File.txt",
+                        "folder": "D:\\Work",
+                        "relative_path": "Work\\New_File.txt",
+                        "extension": ".txt",
+                        "type_badge": "TXT",
+                        "type_class": "document",
+                        "type_label": "TXT",
+                        "size": "2 KB",
+                        "size_bytes": 2048,
+                        "modified_timestamp": 2000,
+                        "freshness_timestamp": 3000,
+                    }
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        drive.refresh_from_db()
+        agent.refresh_from_db()
+        self.assertEqual(drive.total_files, 2)
+        self.assertEqual(agent.total_files, 2)
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/files-data/",
+            data={"agent_id": "remote-pc-events-add", "drive_root": "D:/"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertLess(
+            data["rows_html"].index("New_File.txt"),
+            data["rows_html"].index("Old_File.txt"),
+        )
+        self.assertEqual(data["pagination"]["total_matching_display"], "2")
+
+    def test_agent_file_events_delete_remote_file_and_lower_count(self):
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-events-delete",
+            host_name="DELETE-EVENTS-PC",
+            ip_address="192.168.1.83",
+            drive_count=1,
+            total_files=2,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=2,
+            indexed_files=2,
+            count_complete=True,
+        )
+
+        for name in ("Keep_File.txt", "Delete_File.txt"):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=name,
+                folder="D:\\Work",
+                relative_path=f"Work\\{name}",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+                freshness_timestamp=1000,
+            )
+
+        response = self.client.post(
+            "/agent-file-events/",
+            data={
+                "agent_id": "remote-pc-events-delete",
+                "host_name": "DELETE-EVENTS-PC",
+                "drive_label": "D:\\",
+                "drive_value": "D:/",
+                "index_ready": True,
+                "deleted_paths": ["Work\\Delete_File.txt"],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["total_files"], 1)
+        self.assertEqual(data["deleted_files"], 1)
+        drive.refresh_from_db()
+        agent.refresh_from_db()
+        self.assertEqual(drive.total_files, 1)
+        self.assertEqual(drive.indexed_files, 1)
+        self.assertEqual(agent.total_files, 1)
+        self.assertFalse(
+            ActiveAgentFile.objects.filter(
+                drive=drive,
+                relative_path="Work\\Delete_File.txt",
+            ).exists()
+        )
+        self.assertTrue(
+            ActiveAgentFile.objects.filter(
+                drive=drive,
+                relative_path="Work\\Keep_File.txt",
+            ).exists()
+        )
+
     def test_agent_rescan_preserves_previous_files_until_complete(self):
         user = get_user_model().objects.create_user(
             username="admin-user",

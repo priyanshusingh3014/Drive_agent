@@ -865,14 +865,37 @@ def _visible_entry_stat(entry):
     return stat_result
 
 
-def file_metadata(root, entry, stat_result=None):
+def _visible_path_stat(file_path):
+    file_path = Path(file_path)
+
+    if file_path.name.startswith("."):
+        return None
+
+    try:
+        stat_result = file_path.stat()
+    except OSError:
+        return None
+
+    file_attributes = getattr(stat_result, "st_file_attributes", 0)
+
+    if file_attributes & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
+        return None
+
+    return stat_result
+
+
+def file_metadata_from_path(root, file_path, stat_result=None):
+    file_path = Path(file_path)
+
     if stat_result is None:
-        stat_result = _visible_entry_stat(entry)
+        stat_result = _visible_path_stat(file_path)
 
         if stat_result is None:
             return None
 
-    file_path = Path(entry.path)
+    if not file_path.is_file():
+        return None
+
     extension = file_path.suffix or "No extension"
     modified_timestamp = stat_result.st_mtime
 
@@ -899,6 +922,10 @@ def file_metadata(root, entry, stat_result=None):
     return metadata
 
 
+def file_metadata(root, entry, stat_result=None):
+    return file_metadata_from_path(root, Path(entry.path), stat_result)
+
+
 def build_agent_endpoint_url(server_url, endpoint_name):
     parsed_url = urllib.parse.urlparse(server_url)
     heartbeat_path = parsed_url.path or "/agent-heartbeat/"
@@ -915,6 +942,10 @@ def build_agent_endpoint_url(server_url, endpoint_name):
 
 def build_files_batch_url(server_url):
     return build_agent_endpoint_url(server_url, "agent-files-batch")
+
+
+def build_file_events_url(server_url):
+    return build_agent_endpoint_url(server_url, "agent-file-events")
 
 
 def build_file_download_url(server_url):
@@ -1069,6 +1100,7 @@ class FileCountCache:
         self.refresh_seconds = refresh_seconds
         self.server_url = server_url
         self.files_batch_url = build_files_batch_url(server_url)
+        self.file_events_url = build_file_events_url(server_url)
         self.api_token = api_token
         self.batch_size = batch_size
         self.first_batch_size = first_batch_size
@@ -1080,6 +1112,7 @@ class FileCountCache:
         self._lock = threading.RLock()
         self._counts = {}
         self._active_scan_values = set()
+        self._rescan_after_active_values = set()
         self._condition = threading.Condition()
         self._requested_drive_values = set()
         self._known_paths_by_drive = {}
@@ -1101,6 +1134,7 @@ class FileCountCache:
         with self._lock:
             self.server_url = server_url
             self.files_batch_url = build_files_batch_url(server_url)
+            self.file_events_url = build_file_events_url(server_url)
 
     def _root_for_drive_value(self, requested_drive_value):
         normalized_requested_value = normalize_drive_value(requested_drive_value)
@@ -1134,6 +1168,28 @@ class FileCountCache:
             return None, "Requested file was not found."
 
         return requested_file, ""
+
+    def _safe_relative_file_path(self, root, relative_path):
+        raw_relative_path = str(relative_path or "").strip()
+
+        if not raw_relative_path:
+            return None, ""
+
+        normalized_input = raw_relative_path.replace("/", os.sep).lstrip("\\/")
+
+        try:
+            root_path = root.resolve()
+            file_path = (root_path / normalized_input).resolve()
+            normalized_relative_path = str(file_path.relative_to(root_path))
+        except (OSError, ValueError):
+            return None, ""
+
+        path_parts = [part.lower() for part in Path(normalized_relative_path).parts]
+
+        if any(part in EXCLUDED_FOLDER_NAMES or part.startswith(".") for part in path_parts):
+            return None, ""
+
+        return file_path, normalized_relative_path
 
     def request_scan(self, root):
         root_value = drive_value(root)
@@ -1282,11 +1338,160 @@ class FileCountCache:
 
         return False
 
+    def report_file_events(self, root, changed_relative_paths=None, deleted_relative_paths=None):
+        root_value = drive_value(root)
+        event_timestamp = time.time()
+        storage_info = drive_storage(root)
+        known_paths, previous_scan_completed = self._scan_baseline(root_value)
+        upsert_files = []
+        deleted_paths = []
+        seen_changed_paths = set()
+        seen_deleted_paths = set()
+        directory_scan_needed = False
+
+        for relative_path in changed_relative_paths or ():
+            file_path, normalized_relative_path = self._safe_relative_file_path(
+                root,
+                relative_path,
+            )
+
+            if not normalized_relative_path:
+                continue
+
+            path_key = os.path.normcase(normalized_relative_path).lower()
+
+            if path_key in seen_changed_paths:
+                continue
+
+            seen_changed_paths.add(path_key)
+
+            if file_path and file_path.exists() and file_path.is_dir():
+                directory_scan_needed = True
+                continue
+
+            metadata = (
+                file_metadata_from_path(root.resolve(), file_path)
+                if file_path
+                else None
+            )
+
+            if metadata:
+                metadata["freshness_timestamp"] = max(
+                    metadata["freshness_timestamp"],
+                    event_timestamp,
+                )
+                upsert_files.append(metadata)
+            elif path_key not in seen_deleted_paths:
+                deleted_paths.append(normalized_relative_path)
+                seen_deleted_paths.add(path_key)
+
+        for relative_path in deleted_relative_paths or ():
+            _file_path, normalized_relative_path = self._safe_relative_file_path(
+                root,
+                relative_path,
+            )
+
+            if not normalized_relative_path:
+                continue
+
+            path_key = os.path.normcase(normalized_relative_path).lower()
+
+            if path_key in seen_deleted_paths:
+                continue
+
+            deleted_paths.append(normalized_relative_path)
+            seen_deleted_paths.add(path_key)
+
+        if not upsert_files and not deleted_paths:
+            return not directory_scan_needed
+
+        payload = {
+            **self.identity,
+            "drive_label": drive_label(root),
+            "drive_value": root_value,
+            "event_timestamp": event_timestamp,
+            "index_ready": previous_scan_completed,
+            "storage": storage_info,
+            "upsert_files": upsert_files,
+            "deleted_paths": deleted_paths,
+        }
+
+        for attempt in range(1, 4):
+            try:
+                status, response_payload = post_json(
+                    self.file_events_url,
+                    self.api_token,
+                    payload,
+                    return_payload=True,
+                )
+                log_message(
+                    f"Reported {len(upsert_files)} file updates and "
+                    f"{len(deleted_paths)} deletes for {drive_label(root)} "
+                    f"with status {status}."
+                )
+
+                with self._lock:
+                    known_path_set = set(
+                        self._known_paths_by_drive.get(root_value, known_paths)
+                    )
+
+                    for file_information in upsert_files:
+                        known_path_set.add(
+                            os.path.normcase(
+                                file_information["relative_path"]
+                            ).lower()
+                        )
+
+                    for relative_path in deleted_paths:
+                        known_path_set.discard(
+                            os.path.normcase(relative_path).lower()
+                        )
+
+                    if known_path_set or previous_scan_completed:
+                        self._known_paths_by_drive[root_value] = known_path_set
+
+                    count_snapshot = self._counts.get(root_value, {})
+                    current_total = count_snapshot.get("total_files", 0)
+                    reported_total = _positive_int(
+                        response_payload.get("total_files"),
+                        current_total,
+                    )
+                    count_complete = bool(
+                        response_payload.get("count_complete")
+                        or previous_scan_completed
+                    )
+                    total_files = (
+                        reported_total
+                        if count_complete
+                        else max(current_total, reported_total)
+                    )
+                    self._counts[root_value] = {
+                        "total_files": total_files,
+                        "indexed_files": total_files,
+                        "count_complete": count_complete,
+                    }
+
+                return not directory_scan_needed
+            except (OSError, urllib.error.URLError, urllib.error.HTTPError) as error:
+                if attempt == 3:
+                    log_message(
+                        f"File event report failed for {drive_label(root)}: {error}"
+                    )
+                    return False
+
+                log_message(
+                    f"File event retry {attempt} for {drive_label(root)}: {error}"
+                )
+                time.sleep(0.2 * attempt)
+
+        return False
+
     def _run_drive_scan(self, root):
         root_value = drive_value(root)
 
         with self._lock:
             if root_value in self._active_scan_values:
+                self._rescan_after_active_values.add(root_value)
                 return False
 
             self._active_scan_values.add(root_value)
@@ -1295,8 +1500,15 @@ class FileCountCache:
             self._count_drive_files(root)
             return True
         finally:
+            should_rescan = False
+
             with self._lock:
                 self._active_scan_values.discard(root_value)
+                should_rescan = root_value in self._rescan_after_active_values
+                self._rescan_after_active_values.discard(root_value)
+
+            if should_rescan and not self._stop_event.is_set():
+                self._start_priority_scan(root)
 
     def _count_drive_files(self, root):
         total_files = 0
@@ -1521,6 +1733,90 @@ class DriveChangeWatcher:
             self._timers[root_value] = timer
             timer.start()
 
+    def _parse_change_events(self, buffer, byte_count):
+        events = []
+        offset = 0
+        raw_buffer = buffer.raw
+
+        while offset + 12 <= byte_count:
+            next_entry_offset = int.from_bytes(
+                raw_buffer[offset:offset + 4],
+                "little",
+            )
+            action = int.from_bytes(raw_buffer[offset + 4:offset + 8], "little")
+            file_name_length = int.from_bytes(
+                raw_buffer[offset + 8:offset + 12],
+                "little",
+            )
+            file_name_start = offset + 12
+            file_name_end = file_name_start + file_name_length
+
+            if file_name_end > byte_count:
+                break
+
+            file_name = raw_buffer[file_name_start:file_name_end].decode(
+                "utf-16-le",
+                errors="ignore",
+            )
+            events.append((action, file_name))
+
+            if not next_entry_offset:
+                break
+
+            offset += next_entry_offset
+
+        return events
+
+    def _handle_drive_change_events(self, root, events):
+        file_action_added = 1
+        file_action_removed = 2
+        file_action_modified = 3
+        file_action_renamed_old_name = 4
+        file_action_renamed_new_name = 5
+        changed_paths = []
+        deleted_paths = []
+        scan_needed = False
+
+        for action, relative_path in events:
+            if not relative_path:
+                continue
+
+            if action in (file_action_removed, file_action_renamed_old_name):
+                deleted_paths.append(relative_path)
+                scan_needed = True
+                continue
+
+            if action in (
+                file_action_added,
+                file_action_modified,
+                file_action_renamed_new_name,
+            ):
+                try:
+                    changed_path = (root / relative_path).resolve()
+                except OSError:
+                    scan_needed = True
+                    continue
+
+                if changed_path.exists() and changed_path.is_dir():
+                    scan_needed = True
+                    continue
+
+                changed_paths.append(relative_path)
+                continue
+
+            scan_needed = True
+
+        if changed_paths or deleted_paths:
+            if not self.count_cache.report_file_events(
+                root,
+                changed_paths,
+                deleted_paths,
+            ):
+                scan_needed = True
+
+        if scan_needed:
+            self._queue_debounced_scan(root)
+
     def _watch_drive(self, root):
         try:
             import ctypes
@@ -1599,7 +1895,17 @@ class DriveChangeWatcher:
                     None,
                 )
 
-                if success:
+                if success and bytes_returned.value:
+                    events = self._parse_change_events(
+                        buffer,
+                        bytes_returned.value,
+                    )
+
+                    if events:
+                        self._handle_drive_change_events(root, events)
+                    else:
+                        self._queue_debounced_scan(root)
+                elif success:
                     self._queue_debounced_scan(root)
                 elif not self._stop_event.is_set():
                     error_code = ctypes.get_last_error()

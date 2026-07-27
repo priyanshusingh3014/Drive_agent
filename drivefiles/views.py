@@ -360,6 +360,30 @@ def _normalize_agent_file(raw_file):
     }
 
 
+def _normalize_deleted_relative_paths(raw_paths):
+    if not isinstance(raw_paths, list):
+        return []
+
+    normalized_paths = []
+    seen_paths = set()
+
+    for raw_path in raw_paths:
+        relative_path = _safe_text(raw_path, 2048).strip()
+
+        if not relative_path:
+            continue
+
+        path_key = relative_path.replace("/", "\\").lower()
+
+        if path_key in seen_paths:
+            continue
+
+        seen_paths.add(path_key)
+        normalized_paths.append(relative_path)
+
+    return normalized_paths[:getattr(settings, "AGENT_FILE_BATCH_SIZE", 1000)]
+
+
 def _drive_report_payload(drive_report):
     storage = drive_report.storage if isinstance(drive_report.storage, dict) else {}
     total_files = max(drive_report.total_files, drive_report.indexed_files)
@@ -2508,6 +2532,197 @@ def agent_files_batch(request):
             "agent_id": agent.agent_id,
             "drive_value": drive_report.value,
             "accepted_files": len(normalized_files),
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def agent_file_events(request):
+    if not _is_agent_request_authorized(request):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Unauthorized agent token.",
+            },
+            status=403,
+        )
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Invalid JSON payload.",
+            },
+            status=400,
+        )
+
+    if not isinstance(payload, dict):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Payload must be a JSON object.",
+            },
+            status=400,
+        )
+
+    agent_id = _safe_text(payload.get("agent_id"), 128).strip()
+    drive_value = _safe_text(payload.get("drive_value"), 64).strip()
+
+    if not agent_id or not drive_value:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "agent_id and drive_value are required.",
+            },
+            status=400,
+        )
+
+    host_name = _safe_text(payload.get("host_name") or agent_id, 255)
+    ip_address = _safe_text(
+        payload.get("ip_address") or request.META.get("REMOTE_ADDR", ""),
+        64,
+    )
+    mac_address = _safe_text(payload.get("mac_address"), 64)
+    os_label = _safe_text(payload.get("os_label"), 128)
+    architecture = _safe_text(payload.get("architecture"), 64)
+    _remove_duplicate_agent_reports(agent_id, host_name, mac_address, ip_address)
+
+    agent, _created = ActiveAgent.objects.get_or_create(
+        agent_id=agent_id,
+        defaults={
+            "host_name": host_name,
+            "ip_address": ip_address,
+        },
+    )
+    agent.host_name = host_name or agent.host_name or agent_id
+    agent.ip_address = ip_address or agent.ip_address
+    agent.mac_address = mac_address or agent.mac_address
+    agent.os_label = os_label or agent.os_label
+    agent.architecture = architecture or agent.architecture
+
+    storage = payload.get("storage")
+
+    if not isinstance(storage, dict):
+        storage = {}
+
+    storage_payload = {
+        "used_display": _safe_text(storage.get("used_display") or "Unavailable", 32),
+        "total_display": _safe_text(storage.get("total_display") or "Unavailable", 32),
+        "free_display": _safe_text(storage.get("free_display") or "Unavailable", 32),
+        "percent_used": _safe_percent(storage.get("percent_used")),
+    }
+    drive_report, _created = ActiveAgentDrive.objects.get_or_create(
+        agent=agent,
+        value=drive_value,
+        defaults={
+            "label": _safe_text(payload.get("drive_label") or drive_value, 32),
+        },
+    )
+    drive_report.label = _safe_text(payload.get("drive_label") or drive_value, 32)
+    drive_report.storage = storage_payload
+
+    batch_limit = getattr(settings, "AGENT_FILE_BATCH_SIZE", 1000)
+    raw_upsert_files = payload.get("upsert_files")
+
+    if not isinstance(raw_upsert_files, list):
+        raw_upsert_files = []
+
+    normalized_files_by_path = {}
+
+    for raw_file in raw_upsert_files[:batch_limit]:
+        normalized_file = _normalize_agent_file(raw_file)
+
+        if normalized_file:
+            normalized_files_by_path[normalized_file["relative_path"]] = normalized_file
+
+    normalized_files = list(normalized_files_by_path.values())
+    relative_paths = list(normalized_files_by_path.keys())
+    deleted_paths = _normalize_deleted_relative_paths(payload.get("deleted_paths"))
+
+    if deleted_paths:
+        ActiveAgentFile.objects.filter(
+            drive=drive_report,
+            relative_path__in=deleted_paths,
+        ).delete()
+
+    if relative_paths:
+        ActiveAgentFile.objects.filter(
+            drive=drive_report,
+            relative_path__in=relative_paths,
+        ).delete()
+
+    if normalized_files:
+        ActiveAgentFile.objects.bulk_create(
+            [
+                ActiveAgentFile(
+                    agent=agent,
+                    drive=drive_report,
+                    reported_scan_id=drive_report.scan_id,
+                    **file_information,
+                )
+                for file_information in normalized_files
+            ],
+            batch_size=batch_limit,
+        )
+
+    current_file_count = drive_report.file_reports.count()
+    index_ready = bool(payload.get("index_ready")) or drive_report.count_complete
+
+    if index_ready:
+        drive_report.total_files = current_file_count
+        drive_report.indexed_files = current_file_count
+        drive_report.count_complete = True
+    else:
+        drive_report.total_files = max(
+            _stable_drive_file_count(drive_report),
+            current_file_count,
+        )
+        drive_report.indexed_files = max(
+            drive_report.indexed_files,
+            current_file_count,
+        )
+        drive_report.count_complete = False
+
+    drive_report.save(
+        update_fields=(
+            "label",
+            "total_files",
+            "indexed_files",
+            "count_complete",
+            "storage",
+            "last_reported_at",
+        )
+    )
+
+    agent.total_files = sum(
+        agent.drive_reports.values_list("total_files", flat=True)
+    )
+    agent.drive_count = agent.drive_reports.count()
+    agent.save(
+        update_fields=(
+            "host_name",
+            "ip_address",
+            "mac_address",
+            "os_label",
+            "architecture",
+            "total_files",
+            "drive_count",
+            "last_seen_at",
+        )
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "agent_id": agent.agent_id,
+            "drive_value": drive_report.value,
+            "accepted_files": len(normalized_files),
+            "deleted_files": len(deleted_paths),
+            "total_files": drive_report.total_files,
+            "count_complete": drive_report.count_complete,
         }
     )
 
