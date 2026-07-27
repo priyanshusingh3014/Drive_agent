@@ -2229,6 +2229,10 @@ def agent_heartbeat(request):
                 total_files_value = incoming_file_count
                 indexed_files_value = incoming_file_count
                 count_complete_value = True
+            elif drive_report.file_reports.count() == incoming_file_count:
+                total_files_value = incoming_file_count
+                indexed_files_value = incoming_file_count
+                count_complete_value = True
             else:
                 total_files_value = stable_file_count
                 indexed_files_value = stable_file_count

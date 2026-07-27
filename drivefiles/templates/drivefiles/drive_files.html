@@ -537,6 +537,7 @@
         let scrollPageRequestController = null;
         let scrollPageInFlight = false;
         let scrollFramePending = false;
+        let scrollLoadedPage = currentPage;
         let scrollNextPage = {{ has_next_page|yesno:"true,false" }} ? currentPage + 1 : null;
         let scrollLoadedStartDisplay = "{{ page_start_display|escapejs }}";
         let scrollLoadedEndDisplay = "{{ page_end_display|escapejs }}";
@@ -866,11 +867,18 @@
             }
         }
 
+        function displayNumberToInteger(value) {
+            const parsedValue = Number.parseInt(String(value || "0").replace(/,/g, ""), 10);
+
+            return Number.isNaN(parsedValue) ? 0 : parsedValue;
+        }
+
         function resetScrollState(pagination, shouldResetPosition = true) {
             if (!pagination) {
                 return;
             }
 
+            scrollLoadedPage = pagination.page_number;
             scrollLoadedStartDisplay = pagination.page_start_display;
             scrollLoadedEndDisplay = pagination.page_end_display;
             scrollTotalDisplay = pagination.total_matching_display;
@@ -885,6 +893,31 @@
             }
 
             window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
+        }
+
+        function updatePreservedScrollState(pagination) {
+            if (!pagination) {
+                return;
+            }
+
+            const loadedEnd = displayNumberToInteger(scrollLoadedEndDisplay);
+            const totalMatching = displayNumberToInteger(pagination.total_matching_display);
+
+            scrollTotalDisplay = pagination.total_matching_display;
+
+            if (totalMatching && loadedEnd > totalMatching) {
+                scrollLoadedEndDisplay = pagination.total_matching_display;
+            }
+
+            if (!scrollNextPage && pagination.total_pages > scrollLoadedPage) {
+                scrollNextPage = scrollLoadedPage + 1;
+            }
+
+            updateScrollSummary();
+        }
+
+        function fileScrollAwayFromTop() {
+            return Boolean(tableScrollElement && tableScrollElement.scrollTop > 8);
         }
 
         function fileScrollNearBottom() {
@@ -925,6 +958,7 @@
 
             scrollLoadedEndDisplay = data.pagination.page_end_display;
             scrollTotalDisplay = data.pagination.total_matching_display;
+            scrollLoadedPage = data.pagination.page_number;
             scrollNextPage = data.pagination.has_next_page
                 ? data.pagination.page_number + 1
                 : null;
@@ -1196,14 +1230,19 @@
             });
         }
 
-        function applyFilesPayload(data, currentQuery) {
+        function applyFilesPayload(data, currentQuery, options = {}) {
             if (!payloadBelongsToCurrentSelection(data)) {
                 setRowsBusy(false);
                 return false;
             }
 
+            const preserveRows = Boolean(options.preserveRows);
             selectedAgentId = data.selected_agent_id ?? data.dashboard?.selected_agent_id ?? selectedAgentId;
-            rowsElement.innerHTML = data.rows_html;
+
+            if (!preserveRows) {
+                rowsElement.innerHTML = data.rows_html;
+            }
+
             setRowsBusy(false);
             errorElement.textContent = data.error_message || "";
             errorElement.hidden = !data.error_message;
@@ -1213,8 +1252,13 @@
                 currentFilesElement.textContent = `${data.current_files_display} files`;
             }
 
-            renderPagination(data.pagination);
-            resetScrollState(data.pagination);
+            if (preserveRows) {
+                updatePreservedScrollState(data.pagination);
+            } else {
+                renderPagination(data.pagination);
+                resetScrollState(data.pagination);
+            }
+
             renderDriveOptions(data.drive_options, data.selected_drive_value);
 
             if (
@@ -1413,7 +1457,9 @@
                     );
                 }
 
-                applyFilesPayload(data, currentQuery);
+                applyFilesPayload(data, currentQuery, {
+                    preserveRows: !isPriorityRefresh && fileScrollAwayFromTop(),
+                });
             } catch (error) {
                 if (error.name === "AbortError") {
                     setRowsBusy(false);

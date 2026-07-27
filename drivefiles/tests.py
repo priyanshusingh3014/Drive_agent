@@ -265,6 +265,65 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertFalse(drive.count_complete)
         self.assertEqual(agent.total_files, 5)
 
+    def test_completed_heartbeat_lowers_drive_after_file_batch_finalizes(self):
+        agent = ActiveAgent.objects.create(
+            agent_id="delete-heartbeat-pc",
+            host_name="DELETE-HEARTBEAT-PC",
+            ip_address="192.168.1.52",
+            drive_count=1,
+            total_files=5,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=5,
+            indexed_files=5,
+            count_complete=True,
+        )
+
+        for index in range(2):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=f"Current_File_{index}.txt",
+                folder="D:\\Work",
+                relative_path=f"Work\\Current_File_{index}.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+            )
+
+        response = self.client.post(
+            "/agent-heartbeat/",
+            data={
+                "agent_id": "delete-heartbeat-pc",
+                "host_name": "DELETE-HEARTBEAT-PC",
+                "drives": [
+                    {
+                        "label": "D:\\",
+                        "value": "D:/",
+                        "total_files": 2,
+                        "indexed_files": 2,
+                        "count_complete": True,
+                    },
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        drive.refresh_from_db()
+        agent.refresh_from_db()
+        self.assertEqual(drive.total_files, 2)
+        self.assertEqual(drive.indexed_files, 2)
+        self.assertTrue(drive.count_complete)
+        self.assertEqual(agent.total_files, 2)
+
     def test_active_agents_data_requires_login_and_returns_agents(self):
         user = get_user_model().objects.create_user(
             username="admin-user",

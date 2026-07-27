@@ -1082,6 +1082,7 @@ class FileCountCache:
         self._active_scan_values = set()
         self._condition = threading.Condition()
         self._requested_drive_values = set()
+        self._known_paths_by_drive = {}
         self._stop_event = threading.Event()
         self._skip_next_full_scan = True
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -1225,6 +1226,18 @@ class FileCountCache:
                 "count_complete": count_complete,
             }
 
+    def _scan_baseline(self, value):
+        with self._lock:
+            count_snapshot = self._counts.get(value, {})
+            return (
+                set(self._known_paths_by_drive.get(value, set())),
+                bool(count_snapshot.get("count_complete")),
+            )
+
+    def _set_known_paths(self, value, known_paths):
+        with self._lock:
+            self._known_paths_by_drive[value] = set(known_paths)
+
     def _post_files_batch(
         self,
         root,
@@ -1290,10 +1303,13 @@ class FileCountCache:
         root_value = drive_value(root)
         pending_folders = [str(root)]
         file_batch = []
+        current_paths = set()
         batch_index = 0
         scan_id = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
+        scan_started_timestamp = time.time()
         storage_info = drive_storage(root)
         last_batch_posted_at = time.monotonic()
+        known_paths, previous_scan_completed = self._scan_baseline(root_value)
 
         self._set_count(root_value, total_files, False)
 
@@ -1315,6 +1331,7 @@ class FileCountCache:
             batch_index += 1
             file_batch = []
             last_batch_posted_at = time.monotonic()
+            return batch_posted
 
         while pending_folders and not self._stop_event.is_set():
             current_folder = pending_folders.pop()
@@ -1337,6 +1354,20 @@ class FileCountCache:
                                 metadata = file_metadata(root, entry, entry_stat)
 
                                 if metadata:
+                                    path_key = os.path.normcase(
+                                        metadata["relative_path"]
+                                    ).lower()
+                                    current_paths.add(path_key)
+
+                                    if (
+                                        previous_scan_completed
+                                        and path_key not in known_paths
+                                    ):
+                                        metadata["freshness_timestamp"] = max(
+                                            metadata["freshness_timestamp"],
+                                            scan_started_timestamp,
+                                        )
+
                                     total_files += 1
                                     file_batch.append(metadata)
 
@@ -1376,7 +1407,8 @@ class FileCountCache:
             except OSError:
                 continue
 
-        post_partial_batch(True)
+        if post_partial_batch(True):
+            self._set_known_paths(root_value, current_paths)
 
     def _run(self):
         while not self._stop_event.is_set():
