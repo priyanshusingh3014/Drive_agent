@@ -1552,6 +1552,70 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertNotIn("D_File_24.txt", data["rows_html"])
         self.assertNotIn("D_File_04.txt", data["rows_html"])
 
+    def test_remote_agent_scroll_batch_returns_large_offset_window(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-scroll-batch",
+            host_name="SCROLL-PC",
+            ip_address="192.168.1.106",
+            drive_count=1,
+            total_files=145,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=145,
+            indexed_files=145,
+            count_complete=True,
+        )
+
+        ActiveAgentFile.objects.bulk_create(
+            ActiveAgentFile(
+                agent=agent,
+                drive=drive,
+                name=f"Batch_File_{index:03d}.txt",
+                folder="D:\\Batch",
+                relative_path=f"Batch\\Batch_File_{index:03d}.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+                freshness_timestamp=index,
+            )
+            for index in range(145)
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/files-data/",
+            data={
+                "agent_id": "remote-pc-scroll-batch",
+                "drive_root": "D:/",
+                "scope": "files",
+                "offset": 10,
+                "limit": 120,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["files_count"], 120)
+        self.assertEqual(data["scroll"]["start_display"], "11")
+        self.assertEqual(data["scroll"]["end_display"], "130")
+        self.assertEqual(data["scroll"]["next_offset"], 130)
+        self.assertTrue(data["scroll"]["has_more"])
+        self.assertIn("Batch_File_134.txt", data["rows_html"])
+        self.assertIn("Batch_File_015.txt", data["rows_html"])
+        self.assertNotIn("Batch_File_144.txt", data["rows_html"])
+        self.assertNotIn("Batch_File_014.txt", data["rows_html"])
+
     def test_remote_agent_file_pagination_uses_explicit_agent_without_session(self):
         user = get_user_model().objects.create_user(
             username="admin-user",

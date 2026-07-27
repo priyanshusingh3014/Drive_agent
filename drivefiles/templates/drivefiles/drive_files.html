@@ -10,7 +10,7 @@
     >
 
     <title>{{ dashboard_title }}</title>
-    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260727-agent-selection-fix">
+    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260728-fast-scroll">
 </head>
 
 <body>
@@ -473,6 +473,7 @@
         const refreshIntervalMs = {{ refresh_interval_ms }};
         const activeAgentsRefreshIntervalMs = {{ active_agents_refresh_interval_ms }};
         const idleLogoutMs = 60 * 1000;
+        const scrollBatchSize = 120;
         const dataUrl = "{% url 'drive_files_data' %}";
         const activeAgentsUrl = "{% url 'active_agents_data' %}";
         const selectAgentUrl = "{% url 'select_agent' %}";
@@ -539,11 +540,14 @@
         let scrollFramePending = false;
         let scrollLoadedPage = currentPage;
         let scrollNextPage = {{ has_next_page|yesno:"true,false" }} ? currentPage + 1 : null;
+        let scrollHasMore = {{ has_next_page|yesno:"true,false" }};
         let activeAgentsRequestController = null;
         let activeAgentsRequestSequence = 0;
         let scrollLoadedStartDisplay = "{{ page_start_display|escapejs }}";
         let scrollLoadedEndDisplay = "{{ page_end_display|escapejs }}";
         let scrollTotalDisplay = "{{ total_matching_display|escapejs }}";
+        let scrollNextOffset = displayNumberToInteger(scrollLoadedEndDisplay);
+        let scrollPrefetchTimer = null;
         let searchRefreshTimer = null;
         let dashboardActionInFlight = false;
         let dashboardActionSequence = 0;
@@ -885,6 +889,8 @@
             scrollLoadedEndDisplay = pagination.page_end_display;
             scrollTotalDisplay = pagination.total_matching_display;
             scrollNextPage = pagination.has_next_page ? pagination.page_number + 1 : null;
+            scrollHasMore = pagination.has_next_page;
+            scrollNextOffset = displayNumberToInteger(pagination.page_end_display);
             updateScrollSummary();
 
             if (tableScrollElement && shouldResetPosition) {
@@ -895,6 +901,7 @@
             }
 
             window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
+            scheduleScrollPrefetch(90);
         }
 
         function updatePreservedScrollState(pagination) {
@@ -909,6 +916,14 @@
 
             if (totalMatching && loadedEnd > totalMatching) {
                 scrollLoadedEndDisplay = pagination.total_matching_display;
+                scrollNextOffset = totalMatching;
+                scrollHasMore = false;
+            } else if (totalMatching > loadedEnd) {
+                scrollNextOffset = loadedEnd;
+                scrollHasMore = true;
+            } else {
+                scrollNextOffset = loadedEnd;
+                scrollHasMore = false;
             }
 
             if (!scrollNextPage && pagination.total_pages > scrollLoadedPage) {
@@ -931,13 +946,13 @@
                 - tableScrollElement.scrollTop
                 - tableScrollElement.clientHeight;
 
-            return remainingDistance < 90;
+            return remainingDistance < Math.max(700, tableScrollElement.clientHeight * 1.8);
         }
 
         function fileScrollNeedsRows() {
             return Boolean(
                 tableScrollElement
-                && scrollNextPage
+                && scrollHasMore
                 && tableScrollElement.scrollHeight <= tableScrollElement.clientHeight + 4
             );
         }
@@ -958,12 +973,22 @@
                 }
             }
 
-            scrollLoadedEndDisplay = data.pagination.page_end_display;
-            scrollTotalDisplay = data.pagination.total_matching_display;
-            scrollLoadedPage = data.pagination.page_number;
-            scrollNextPage = data.pagination.has_next_page
-                ? data.pagination.page_number + 1
-                : null;
+            if (data.scroll) {
+                scrollLoadedEndDisplay = data.scroll.end_display;
+                scrollTotalDisplay = data.scroll.total_display;
+                scrollNextOffset = data.scroll.next_offset || displayNumberToInteger(data.scroll.end_display);
+                scrollHasMore = Boolean(data.scroll.has_more);
+            } else {
+                scrollLoadedEndDisplay = data.pagination.page_end_display;
+                scrollTotalDisplay = data.pagination.total_matching_display;
+                scrollLoadedPage = data.pagination.page_number;
+                scrollNextPage = data.pagination.has_next_page
+                    ? data.pagination.page_number + 1
+                    : null;
+                scrollNextOffset = displayNumberToInteger(data.pagination.page_end_display);
+                scrollHasMore = data.pagination.has_next_page;
+            }
+
             updateScrollSummary();
 
             if (!data.dashboard && data.current_files_display && currentFilesElement) {
@@ -976,6 +1001,20 @@
             return true;
         }
 
+        function scheduleScrollPrefetch(delayMs = 120) {
+            window.clearTimeout(scrollPrefetchTimer);
+
+            if (!scrollHasMore || scrollPageInFlight || dashboardActionInFlight) {
+                return;
+            }
+
+            scrollPrefetchTimer = window.setTimeout(function () {
+                loadNextScrollPage({
+                    prefetch: true,
+                });
+            }, delayMs);
+        }
+
         function abortPassiveRefreshForScroll() {
             if (refreshRequestController) {
                 refreshRequestController.abort();
@@ -984,8 +1023,8 @@
             }
         }
 
-        async function loadNextScrollPage() {
-            if (!scrollNextPage || scrollPageInFlight || dashboardActionInFlight) {
+        async function loadNextScrollPage(options = {}) {
+            if (!scrollHasMore || scrollPageInFlight || dashboardActionInFlight) {
                 return;
             }
 
@@ -995,10 +1034,12 @@
             const requestedFilter = activeFilter;
             const requestedAgentId = selectedAgentId;
             const requestedDriveValue = currentDriveValue();
+            const requestedOffset = scrollNextOffset;
             const params = new URLSearchParams();
             appendDashboardSelectionParams(params);
             params.set("scope", "files");
-            params.set("page", scrollNextPage);
+            params.set("offset", requestedOffset);
+            params.set("limit", scrollBatchSize);
 
             if (currentQuery) {
                 params.set("search", currentQuery);
@@ -1012,7 +1053,7 @@
             scrollPageRequestController = new AbortController();
             scrollPageInFlight = true;
 
-            if (tableScrollElement) {
+            if (tableScrollElement && !options.prefetch) {
                 tableScrollElement.classList.add("loading-more");
             }
 
@@ -1036,6 +1077,7 @@
                     && requestedFilter === activeFilter
                     && requestedAgentId === selectedAgentId
                     && requestedDriveValue === currentDriveValue()
+                    && requestedOffset === scrollNextOffset
                 ) {
                     appendFilesPayload(data, currentQuery);
                 }
@@ -1051,7 +1093,11 @@
                     tableScrollElement.classList.remove("loading-more");
                 }
 
-                window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
+                window.setTimeout(function () {
+                    if (fileScrollNeedsRows() || fileScrollNearBottom()) {
+                        loadNextScrollPage();
+                    }
+                }, 0);
             }
         }
 
@@ -1079,6 +1125,7 @@
 
         function cancelRefreshRequest() {
             window.clearTimeout(searchRefreshTimer);
+            window.clearTimeout(scrollPrefetchTimer);
 
             if (refreshRequestController) {
                 refreshRequestController.abort();
@@ -1313,6 +1360,8 @@
             lastRenderedFilter = activeFilter;
             scrollLoadedPage = 1;
             scrollNextPage = null;
+            scrollNextOffset = 0;
+            scrollHasMore = false;
         }
 
         async function selectAgent(agentId) {

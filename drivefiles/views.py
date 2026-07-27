@@ -49,6 +49,8 @@ from .scanner import (
 FRONTEND_REFRESH_SECONDS = 0.5
 ACTIVE_AGENTS_REFRESH_SECONDS = 0.5
 TABLE_PAGE_SIZE = 10
+SCROLL_BATCH_SIZE = 120
+MAX_SCROLL_BATCH_SIZE = 250
 SELECTED_DRIVE_SESSION_KEY = "drivefiles_selected_drive_root"
 SELECTED_AGENT_SESSION_KEY = "drivefiles_selected_agent_id"
 SELECTED_AGENT_DRIVE_SESSION_KEY = "drivefiles_selected_agent_drive"
@@ -902,6 +904,48 @@ def _parse_positive_int(value, default=1):
     return parsed_value if parsed_value > 0 else default
 
 
+def _parse_non_negative_int(value, default=0):
+    try:
+        parsed_value = int(value)
+    except (TypeError, ValueError):
+        return default
+
+    return parsed_value if parsed_value >= 0 else default
+
+
+def _requested_scroll_window(request):
+    if "offset" not in request.GET:
+        return None
+
+    return {
+        "offset": _parse_non_negative_int(request.GET.get("offset")),
+        "limit": min(
+            _parse_positive_int(
+                request.GET.get("limit"),
+                default=SCROLL_BATCH_SIZE,
+            ),
+            MAX_SCROLL_BATCH_SIZE,
+        ),
+    }
+
+
+def _build_scroll_info(total_items, offset, limit):
+    safe_offset = min(max(offset, 0), total_items)
+    safe_limit = min(max(limit, 1), MAX_SCROLL_BATCH_SIZE)
+    end_index = min(safe_offset + safe_limit, total_items)
+    next_offset = end_index if end_index < total_items else None
+
+    return {
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "start_display": _format_number(safe_offset + 1) if total_items else "0",
+        "end_display": _format_number(end_index),
+        "total_display": _format_number(total_items),
+        "next_offset": next_offset,
+        "has_more": next_offset is not None,
+    }
+
+
 def _is_usable_ipv4(value):
     try:
         parsed_address = ipaddress.ip_address(value)
@@ -1602,6 +1646,9 @@ def _drive_files_json_response(context, request=None, extra_payload=None):
     if extra_payload:
         payload.update(extra_payload)
 
+    if context.get("scroll_info"):
+        payload["scroll"] = context["scroll_info"]
+
     return JsonResponse(payload)
 
 
@@ -1643,6 +1690,9 @@ def _files_only_json_response(context, request=None, extra_payload=None):
 
     if extra_payload:
         payload.update(extra_payload)
+
+    if context.get("scroll_info"):
+        payload["scroll"] = context["scroll_info"]
 
     return JsonResponse(payload)
 
@@ -1825,6 +1875,19 @@ def _build_agent_files_context(
         for file_report in filtered_queryset.order_by(
             "-freshness_timestamp",
             "name",
+        ).only(
+            "name",
+            "folder",
+            "relative_path",
+            "extension",
+            "type_badge",
+            "type_class",
+            "type_label",
+            "size",
+            "size_bytes",
+            "modified_timestamp",
+            "freshness_timestamp",
+            "modified_display",
         )[page_start_index:pagination["page_end"]]
     ]
     last_scan_source = (
@@ -1908,9 +1971,29 @@ def _build_agent_files_only_context(
         if selected_drive
         else ActiveAgentFile.objects.none()
     )
-    filtered_count = filtered_queryset.count()
+    indexed_files = selected_drive.indexed_files if selected_drive else 0
+
+    if selected_drive and not search_query and filter_type == "all":
+        filtered_count = indexed_files
+    else:
+        filtered_count = filtered_queryset.count()
+
     pagination = _build_pagination_context(filtered_count, page_number)
-    page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
+    scroll_window = _requested_scroll_window(request)
+
+    if scroll_window:
+        scroll_info = _build_scroll_info(
+            filtered_count,
+            scroll_window["offset"],
+            scroll_window["limit"],
+        )
+        page_start_index = scroll_info["offset"]
+        page_end_index = page_start_index + scroll_info["limit"]
+    else:
+        scroll_info = None
+        page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
+        page_end_index = pagination["page_end"]
+
     paged_files = [
         _remote_file_to_dict(file_report)
         for file_report in filtered_queryset.order_by(
@@ -1929,7 +2012,7 @@ def _build_agent_files_only_context(
             "modified_timestamp",
             "freshness_timestamp",
             "modified_display",
-        )[page_start_index:pagination["page_end"]]
+        )[page_start_index:page_end_index]
     ]
     last_scan_source = (
         selected_drive.last_reported_at
@@ -1950,6 +2033,7 @@ def _build_agent_files_only_context(
         "selected_drive_value": selected_drive_value,
         "selected_agent_id": selected_agent.agent_id,
         "selected_agent_host": selected_agent.host_name,
+        "scroll_info": scroll_info,
         "current_files_display": _format_number(filtered_count),
         "sync_status_title": (
             "Remote Sync Complete"
@@ -2021,8 +2105,22 @@ def _build_local_files_only_context(request, selected_drive_root):
     snapshot = get_file_snapshot(search_query)
     filtered_files, filter_type = _filter_files(snapshot["files"], filter_type)
     pagination = _build_pagination_context(len(filtered_files), page_number)
-    page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
-    paged_files = filtered_files[page_start_index:pagination["page_end"]]
+    scroll_window = _requested_scroll_window(request)
+
+    if scroll_window:
+        scroll_info = _build_scroll_info(
+            len(filtered_files),
+            scroll_window["offset"],
+            scroll_window["limit"],
+        )
+        page_start_index = scroll_info["offset"]
+        page_end_index = page_start_index + scroll_info["limit"]
+    else:
+        scroll_info = None
+        page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
+        page_end_index = pagination["page_end"]
+
+    paged_files = filtered_files[page_start_index:page_end_index]
 
     return {
         **snapshot,
@@ -2031,6 +2129,7 @@ def _build_local_files_only_context(request, selected_drive_root):
         "filter_type": filter_type,
         "search_query": search_query,
         "selected_drive_value": drive_root_to_value(selected_drive_root),
+        "scroll_info": scroll_info,
         "current_files_display": _format_number(len(filtered_files)),
         "sync_status_title": "Sync Running" if snapshot["is_scanning"] else "Sync Complete",
     }
