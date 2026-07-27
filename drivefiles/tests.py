@@ -330,7 +330,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["online_agents"], 0)
         self.assertEqual(data["agents"], [])
 
-    def test_active_agents_data_uses_stable_hostname_order(self):
+    def test_active_agents_data_uses_stable_first_seen_order(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
             password="pass-12345",
@@ -346,9 +346,11 @@ class ActiveAgentHeartbeatTests(TestCase):
             ip_address="192.168.1.41",
         )
         ActiveAgent.objects.filter(agent_id="beta-pc").update(
+            first_seen_at=timezone.now() - timedelta(seconds=2),
             last_seen_at=timezone.now(),
         )
         ActiveAgent.objects.filter(agent_id="alpha-pc").update(
+            first_seen_at=timezone.now() - timedelta(seconds=1),
             last_seen_at=timezone.now() - timedelta(seconds=1),
         )
 
@@ -359,7 +361,7 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [agent["host_name"] for agent in data["agents"]],
-            ["ALPHA-PC", "BETA-PC"],
+            ["BETA-PC", "ALPHA-PC"],
         )
 
     def test_agent_heartbeat_replaces_duplicate_same_pc_identity(self):

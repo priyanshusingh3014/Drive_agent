@@ -56,6 +56,10 @@
             opacity: 0.7;
         }
 
+        [aria-busy="true"] {
+            cursor: progress;
+        }
+
         h1,
         h2,
         p,
@@ -272,6 +276,11 @@
         .sidebar-user-button.offline .sidebar-user-dot {
             background: #94a3b8;
             box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.16);
+        }
+
+        .sidebar-user-text {
+            display: block;
+            min-width: 0;
         }
 
         .sidebar-user-name,
@@ -1173,6 +1182,11 @@
 
         tbody tr:hover {
             background: #f8fbff;
+        }
+
+        tbody[aria-busy="true"] {
+            opacity: 0.62;
+            transition: opacity 120ms ease;
         }
 
         .file-link {

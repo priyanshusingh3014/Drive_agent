@@ -58,7 +58,10 @@
                             title="{{ agent.ip_address }} | {{ agent.mac_address }}"
                         >
                             <span class="sidebar-user-dot"></span>
-                            <span>{{ agent.host_name }}</span>
+                            <span class="sidebar-user-text">
+                                <span class="sidebar-user-name">{{ agent.host_name }}</span>
+                                <span class="sidebar-user-meta">{{ agent.drive_count }} drives | {{ agent.total_files_display }} files</span>
+                            </span>
                         </button>
                     {% endfor %}
                 </div>
@@ -531,10 +534,18 @@
         let refreshRequestSequence = 0;
         let refreshRequestInFlight = false;
         let searchRefreshTimer = null;
+        let dashboardActionInFlight = false;
+        const activeAgentOrder = new Map();
         let idleLogoutTimer = null;
         let lastActivityResetAt = 0;
         let scanRequestInFlight = false;
         let selectedAgentId = "{{ selected_agent_id|default:''|escapejs }}";
+
+        if (activeAgentsListElement) {
+            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button, index) {
+                activeAgentOrder.set(button.dataset.agentId || "", index);
+            });
+        }
 
         function escapeHtml(value) {
             return String(value)
@@ -802,12 +813,83 @@
             }
         }
 
+        function cancelRefreshRequest() {
+            window.clearTimeout(searchRefreshTimer);
+
+            if (refreshRequestController) {
+                refreshRequestController.abort();
+                refreshRequestController = null;
+            }
+
+            refreshRequestSequence += 1;
+            refreshRequestInFlight = false;
+        }
+
+        function updateActiveAgentSelection() {
+            if (!activeAgentsListElement) {
+                return;
+            }
+
+            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button) {
+                button.classList.toggle("selected", button.dataset.agentId === selectedAgentId);
+            });
+        }
+
+        function setRowsBusy(isBusy) {
+            if (rowsElement) {
+                rowsElement.toggleAttribute("aria-busy", Boolean(isBusy));
+            }
+        }
+
+        function updateActiveAgentButton(button, agent) {
+            const subtitle = `${agent.drive_count || 0} drives | ${agent.total_files_display || "0"} files`;
+            button.type = "button";
+            button.className = `sidebar-user-button${agent.agent_id === selectedAgentId ? " selected" : ""}${agent.is_online === false ? " offline" : ""}`;
+            button.dataset.agentId = agent.agent_id || "";
+            button.title = `${agent.ip_address || "Unavailable"} | ${agent.mac_address || "Unavailable"}`;
+
+            let dot = button.querySelector(".sidebar-user-dot");
+
+            if (!dot) {
+                dot = document.createElement("span");
+                dot.className = "sidebar-user-dot";
+                button.appendChild(dot);
+            }
+
+            let textWrap = button.querySelector(".sidebar-user-text");
+
+            if (!textWrap) {
+                textWrap = document.createElement("span");
+                textWrap.className = "sidebar-user-text";
+                button.appendChild(textWrap);
+            }
+
+            let nameElement = textWrap.querySelector(".sidebar-user-name");
+
+            if (!nameElement) {
+                nameElement = document.createElement("span");
+                nameElement.className = "sidebar-user-name";
+                textWrap.appendChild(nameElement);
+            }
+
+            let metaElement = textWrap.querySelector(".sidebar-user-meta");
+
+            if (!metaElement) {
+                metaElement = document.createElement("span");
+                metaElement.className = "sidebar-user-meta";
+                textWrap.appendChild(metaElement);
+            }
+
+            nameElement.textContent = agent.host_name || "Unknown PC";
+            metaElement.textContent = subtitle;
+        }
+
         function renderActiveAgents(data) {
             if (!data || !activeAgentsListElement) {
                 return;
             }
 
-            const agents = Array.isArray(data.agents) ? data.agents : data.active_agents || [];
+            const agents = Array.isArray(data.agents) ? data.agents.slice() : (data.active_agents || []).slice();
             const previousSelectedAgentId = selectedAgentId;
 
             if (Object.prototype.hasOwnProperty.call(data, "selected_agent_id")) {
@@ -841,30 +923,58 @@
 
             activeAgentsListElement.hidden = false;
 
-            activeAgentsListElement.innerHTML = agents.map(function (agent) {
-                const subtitle = `${agent.drive_count || 0} drives | ${agent.total_files_display || "0"} files`;
-                const onlineClass = agent.is_online === false ? " offline" : "";
+            agents.forEach(function (agent) {
+                const agentId = agent.agent_id || "";
 
-                return `
-                    <button
-                        type="button"
-                        class="sidebar-user-button${agent.agent_id === selectedAgentId ? " selected" : ""}${onlineClass}"
-                        data-agent-id="${escapeHtml(agent.agent_id || "")}"
-                        title="${escapeHtml(agent.ip_address || "Unavailable")} | ${escapeHtml(agent.mac_address || "Unavailable")}"
-                    >
-                        <span class="sidebar-user-dot"></span>
-                        <span>
-                            <span class="sidebar-user-name">${escapeHtml(agent.host_name || "Unknown PC")}</span>
-                            <span class="sidebar-user-meta">${escapeHtml(subtitle)}</span>
-                        </span>
-                    </button>
-                `;
-            }).join("");
+                if (agentId && !activeAgentOrder.has(agentId)) {
+                    activeAgentOrder.set(agentId, activeAgentOrder.size);
+                }
+            });
+
+            agents.sort(function (firstAgent, secondAgent) {
+                const firstOrder = activeAgentOrder.get(firstAgent.agent_id || "") ?? Number.MAX_SAFE_INTEGER;
+                const secondOrder = activeAgentOrder.get(secondAgent.agent_id || "") ?? Number.MAX_SAFE_INTEGER;
+
+                if (firstOrder !== secondOrder) {
+                    return firstOrder - secondOrder;
+                }
+
+                return String(firstAgent.host_name || "").localeCompare(String(secondAgent.host_name || ""));
+            });
+
+            const visibleAgentIds = new Set(agents.map(function (agent) {
+                return agent.agent_id || "";
+            }));
+
+            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button) {
+                if (!visibleAgentIds.has(button.dataset.agentId || "")) {
+                    button.remove();
+                }
+            });
+
+            const existingButtons = new Map();
+
+            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button) {
+                existingButtons.set(button.dataset.agentId || "", button);
+            });
+
+            agents.forEach(function (agent) {
+                const agentId = agent.agent_id || "";
+                let button = existingButtons.get(agentId);
+
+                if (!button) {
+                    button = document.createElement("button");
+                }
+
+                updateActiveAgentButton(button, agent);
+                activeAgentsListElement.appendChild(button);
+            });
         }
 
         function applyFilesPayload(data, currentQuery) {
             selectedAgentId = data.selected_agent_id ?? data.dashboard?.selected_agent_id ?? selectedAgentId;
             rowsElement.innerHTML = data.rows_html;
+            setRowsBusy(false);
             errorElement.textContent = data.error_message || "";
             errorElement.hidden = !data.error_message;
             updateDashboard(data.dashboard);
@@ -904,6 +1014,7 @@
             resetIdleLogoutTimer();
             closeMenus();
             clearSearchInputs();
+            cancelRefreshRequest();
             const previousSelectedAgentId = selectedAgentId;
             activeFilter = "all";
             currentPage = 1;
@@ -913,6 +1024,8 @@
             lastRenderedFilter = activeFilter;
             selectedAgentId = agentId || "";
             updateFilterButtons();
+            updateActiveAgentSelection();
+            dashboardActionInFlight = true;
 
             const formData = new FormData();
             formData.set("agent_id", selectedAgentId);
@@ -920,6 +1033,8 @@
             if (scanStatusTextElement) {
                 scanStatusTextElement.textContent = selectedAgentId ? "Loading User" : "Loading Dashboard";
             }
+
+            setRowsBusy(true);
 
             try {
                 const response = await fetch(selectAgentUrl, {
@@ -933,6 +1048,8 @@
 
                 if (!response.ok) {
                     selectedAgentId = previousSelectedAgentId;
+                    updateActiveAgentSelection();
+                    setRowsBusy(false);
                     refreshActiveAgents();
                     return;
                 }
@@ -940,13 +1057,21 @@
                 applyFilesPayload(await response.json(), "");
             } catch (error) {
                 selectedAgentId = previousSelectedAgentId;
+                updateActiveAgentSelection();
+                setRowsBusy(false);
                 console.error("Unable to select DriveAgent user.", error);
+            } finally {
+                dashboardActionInFlight = false;
             }
         }
 
         async function refreshFiles(options = {}) {
             const isPriorityRefresh = Boolean(options.force);
             const filesOnly = Boolean(options.filesOnly);
+
+            if (dashboardActionInFlight && !isPriorityRefresh) {
+                return;
+            }
 
             if (refreshRequestInFlight && !isPriorityRefresh) {
                 return;
@@ -997,6 +1122,7 @@
                 requestSequence = ++refreshRequestSequence;
                 refreshRequestController = new AbortController();
                 refreshRequestInFlight = true;
+                setRowsBusy(isPriorityRefresh);
 
                 const response = await fetch(requestUrl, {
                     signal: refreshRequestController.signal,
@@ -1006,6 +1132,7 @@
                 });
 
                 if (!response.ok) {
+                    setRowsBusy(false);
                     return;
                 }
 
@@ -1016,6 +1143,7 @@
                 }
 
                 if (data.unchanged) {
+                    setRowsBusy(false);
                     errorElement.textContent = data.error_message || "";
                     errorElement.hidden = !data.error_message;
                     return;
@@ -1030,9 +1158,11 @@
                 applyFilesPayload(data, currentQuery);
             } catch (error) {
                 if (error.name === "AbortError") {
+                    setRowsBusy(false);
                     return;
                 }
 
+                setRowsBusy(false);
                 console.error("Unable to refresh files.", error);
             } finally {
                 if (requestSequence && requestSequence === refreshRequestSequence) {
@@ -1050,6 +1180,7 @@
             resetIdleLogoutTimer();
             closeMenus();
             clearSearchInputs();
+            cancelRefreshRequest();
             activeFilter = "all";
             currentPage = 1;
             lastRenderedVersion = null;
@@ -1068,10 +1199,13 @@
             }
 
             driveSelect.disabled = true;
+            dashboardActionInFlight = true;
 
             if (scanStatusTextElement) {
                 scanStatusTextElement.textContent = "Switching Drive";
             }
+
+            setRowsBusy(true);
 
             try {
                 const response = await fetch(driveSelectForm.action, {
@@ -1103,6 +1237,7 @@
                 driveSelectForm.submit();
             } finally {
                 driveSelect.disabled = false;
+                dashboardActionInFlight = false;
             }
         }
 
@@ -1149,6 +1284,10 @@
 
         async function refreshActiveAgents() {
             if (!activeAgentsListElement) {
+                return;
+            }
+
+            if (dashboardActionInFlight) {
                 return;
             }
 

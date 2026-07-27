@@ -421,7 +421,7 @@ def _build_active_agents(selected_agent_id=""):
         ActiveAgent.objects
         .filter(last_seen_at__gte=online_cutoff)
         .prefetch_related("drive_reports")
-        .order_by("host_name", "agent_id")[:24]
+        .order_by("first_seen_at", "agent_id")[:24]
     )
 
     if selected_agent_id and selected_agent_id not in {agent.agent_id for agent in agents}:
@@ -437,7 +437,7 @@ def _build_active_agents(selected_agent_id=""):
         if selected_agent:
             agents.append(selected_agent)
 
-    agents.sort(key=lambda agent: (agent.host_name.lower(), agent.agent_id))
+    agents.sort(key=lambda agent: (agent.first_seen_at, agent.agent_id))
     active_agents = []
 
     for agent in agents:
