@@ -221,6 +221,50 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(agent.total_files, 20)
         self.assertEqual(agent.drive_reports.count(), 2)
 
+    def test_completed_heartbeat_does_not_lower_drive_before_file_batch_finalizes(self):
+        agent = ActiveAgent.objects.create(
+            agent_id="stable-heartbeat-pc",
+            host_name="STABLE-HEARTBEAT-PC",
+            ip_address="192.168.1.51",
+            drive_count=1,
+            total_files=5,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=5,
+            indexed_files=5,
+            count_complete=True,
+        )
+
+        response = self.client.post(
+            "/agent-heartbeat/",
+            data={
+                "agent_id": "stable-heartbeat-pc",
+                "host_name": "STABLE-HEARTBEAT-PC",
+                "drives": [
+                    {
+                        "label": "D:\\",
+                        "value": "D:/",
+                        "total_files": 2,
+                        "indexed_files": 2,
+                        "count_complete": True,
+                    },
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        drive.refresh_from_db()
+        agent.refresh_from_db()
+        self.assertEqual(drive.total_files, 5)
+        self.assertEqual(drive.indexed_files, 5)
+        self.assertFalse(drive.count_complete)
+        self.assertEqual(agent.total_files, 5)
+
     def test_active_agents_data_requires_login_and_returns_agents(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
@@ -766,6 +810,84 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(
             set(drive.file_reports.values_list("name", flat=True)),
             {"Fresh_File.txt", "Second_Fresh_File.txt"},
+        )
+
+    def test_incomplete_completed_scan_does_not_delete_previous_file_rows(self):
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-incomplete-final",
+            host_name="INCOMPLETE-FINAL-PC",
+            ip_address="192.168.1.84",
+            drive_count=1,
+            total_files=4,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=4,
+            indexed_files=4,
+            count_complete=True,
+            scan_id="old-scan",
+        )
+
+        for index in range(4):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=f"Protected_File_{index}.txt",
+                folder="D:\\Work",
+                relative_path=f"Work\\Protected_File_{index}.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+                reported_scan_id="old-scan",
+            )
+
+        response = self.client.post(
+            "/agent-files-batch/",
+            data={
+                "agent_id": "remote-pc-incomplete-final",
+                "host_name": "INCOMPLETE-FINAL-PC",
+                "drive_label": "D:\\",
+                "drive_value": "D:/",
+                "scan_id": "new-scan",
+                "batch_index": 2,
+                "indexed_files": 3,
+                "total_files": 3,
+                "scan_complete": True,
+                "files": [
+                    {
+                        "name": "Only_Received_File.txt",
+                        "folder": "D:\\Work",
+                        "relative_path": "Work\\Only_Received_File.txt",
+                        "extension": ".txt",
+                        "type_badge": "TXT",
+                        "type_class": "document",
+                        "type_label": "TXT",
+                        "size": "1 KB",
+                        "size_bytes": 1024,
+                        "modified_timestamp": 2200,
+                        "freshness_timestamp": 2200,
+                    }
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        drive.refresh_from_db()
+        self.assertGreaterEqual(drive.total_files, 4)
+        self.assertEqual(drive.total_files, drive.indexed_files)
+        self.assertFalse(drive.count_complete)
+        self.assertTrue(
+            drive.file_reports.filter(name="Protected_File_3.txt").exists()
+        )
+        self.assertTrue(
+            drive.file_reports.filter(name="Only_Received_File.txt").exists()
         )
 
     def test_agent_file_download_upload_stores_requested_file(self):

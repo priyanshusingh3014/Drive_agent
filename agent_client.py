@@ -1248,14 +1248,26 @@ class FileCountCache:
             "files": files,
         }
 
-        try:
-            status = post_json(self.files_batch_url, self.api_token, payload)
-            log_message(
-                f"Reported {len(files)} files for {drive_label(root)} "
-                f"batch {batch_index} with status {status}."
-            )
-        except (OSError, urllib.error.URLError, urllib.error.HTTPError) as error:
-            log_message(f"File batch failed for {drive_label(root)}: {error}")
+        for attempt in range(1, 4):
+            try:
+                status = post_json(self.files_batch_url, self.api_token, payload)
+                log_message(
+                    f"Reported {len(files)} files for {drive_label(root)} "
+                    f"batch {batch_index} with status {status}."
+                )
+                return True
+            except (OSError, urllib.error.URLError, urllib.error.HTTPError) as error:
+                if attempt == 3:
+                    log_message(f"File batch failed for {drive_label(root)}: {error}")
+                    return False
+
+                log_message(
+                    f"File batch retry {attempt} for {drive_label(root)} "
+                    f"batch {batch_index}: {error}"
+                )
+                time.sleep(0.4 * attempt)
+
+        return False
 
     def _run_drive_scan(self, root):
         root_value = drive_value(root)
@@ -1290,7 +1302,7 @@ class FileCountCache:
             nonlocal file_batch
             nonlocal last_batch_posted_at
 
-            self._post_files_batch(
+            batch_posted = self._post_files_batch(
                 root,
                 scan_id,
                 batch_index,
@@ -1299,7 +1311,7 @@ class FileCountCache:
                 scan_complete,
                 storage_info,
             )
-            self._set_count(root_value, total_files, scan_complete)
+            self._set_count(root_value, total_files, scan_complete and batch_posted)
             batch_index += 1
             file_batch = []
             last_batch_posted_at = time.monotonic()

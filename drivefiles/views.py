@@ -208,6 +208,10 @@ def _remove_duplicate_agent_reports(agent_id, host_name, mac_address, ip_address
     ).filter(duplicate_identity_query).exclude(agent_id=agent_id).delete()
 
 
+def _stable_drive_file_count(drive_report):
+    return max(drive_report.total_files, drive_report.indexed_files)
+
+
 def _safe_float(value, default=0):
     try:
         return float(value)
@@ -2119,22 +2123,24 @@ def agent_heartbeat(request):
         )
         incoming_total_files = drive["total_files"]
         incoming_indexed_files = drive["indexed_files"]
+        incoming_file_count = max(incoming_total_files, incoming_indexed_files)
+        stable_file_count = _stable_drive_file_count(drive_report)
 
         if drive["count_complete"]:
-            total_files_value = max(incoming_total_files, incoming_indexed_files)
-            indexed_files_value = incoming_indexed_files
-            count_complete_value = True
+            if incoming_file_count >= stable_file_count:
+                total_files_value = incoming_file_count
+                indexed_files_value = incoming_file_count
+                count_complete_value = True
+            else:
+                total_files_value = stable_file_count
+                indexed_files_value = stable_file_count
+                count_complete_value = False
         else:
             total_files_value = max(
-                drive_report.total_files,
-                drive_report.indexed_files,
-                incoming_total_files,
-                incoming_indexed_files,
+                stable_file_count,
+                incoming_file_count,
             )
-            indexed_files_value = max(
-                drive_report.indexed_files,
-                incoming_indexed_files,
-            )
+            indexed_files_value = total_files_value
             count_complete_value = False
 
         drive_report.label = drive["label"]
@@ -2330,13 +2336,33 @@ def agent_files_batch(request):
     current_file_count = drive_report.file_reports.count()
 
     if scan_complete:
-        if scan_id:
+        completed_scan_file_count = max(incoming_total_files, incoming_indexed_files)
+        received_scan_file_count = (
+            drive_report.file_reports.filter(reported_scan_id=scan_id).count()
+            if scan_id
+            else current_file_count
+        )
+        scan_rows_are_complete = received_scan_file_count >= completed_scan_file_count
+
+        if scan_rows_are_complete and scan_id:
             drive_report.file_reports.exclude(reported_scan_id=scan_id).delete()
 
         current_file_count = drive_report.file_reports.count()
-        drive_report.total_files = current_file_count
-        drive_report.indexed_files = current_file_count
-        drive_report.count_complete = True
+
+        if scan_rows_are_complete:
+            drive_report.total_files = current_file_count
+            drive_report.indexed_files = current_file_count
+            drive_report.count_complete = True
+        else:
+            protected_file_count = max(
+                _stable_drive_file_count(drive_report),
+                completed_scan_file_count,
+                current_file_count,
+            )
+            drive_report.total_files = protected_file_count
+            drive_report.indexed_files = protected_file_count
+            drive_report.count_complete = False
+
         drive_report.save(
             update_fields=(
                 "total_files",
