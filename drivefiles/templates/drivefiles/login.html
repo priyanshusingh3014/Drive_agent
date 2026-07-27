@@ -13,60 +13,126 @@
         {% if auth_mode == "signup" %}Sign Up{% else %}Login{% endif %}
         | {{ app_name }}
     </title>
-    <link rel="stylesheet" href="{% static 'drivefiles/css/auth.css' %}?v=20260722-light">
+    <link rel="stylesheet" href="{% static 'drivefiles/css/auth.css' %}?v=20260727-secure-dashboard">
 </head>
 
 <body>
 
 <main class="auth-shell">
     <section class="brand-panel" aria-label="{{ app_name }}">
-        <div class="panel-rings" aria-hidden="true"></div>
+        <div class="panel-grid" aria-hidden="true"></div>
+        <div class="panel-orbit" aria-hidden="true">
+            <span></span>
+        </div>
 
         <div class="brand-content">
             <div class="brand-lockup">
-                <div class="brand-mark">{{ drive_initial }}</div>
+                <div class="brand-mark" aria-hidden="true">
+                    <svg class="brand-cloud" viewBox="0 0 24 24">
+                        <path d="M6.5 18h10.2a4.3 4.3 0 0 0 .2-8.6 6 6 0 0 0-11.5 1.7A3.5 3.5 0 0 0 6.5 18Z"></path>
+                    </svg>
+                </div>
 
                 <div>
-                    <p class="brand-name">{{ drive_name }}<br>File Agent</p>
-                    <p class="brand-path">{{ drive_label }}</p>
+                    <p class="brand-name">Drive Agent</p>
+                    <p class="brand-subtitle">Secure File Access</p>
                 </div>
             </div>
 
-            <h1 class="brand-heading">Secure {{ drive_label }} Access.</h1>
+            <div class="brand-copy">
+                <h1>Secure Drive Access.</h1>
+                <p>Safely access and manage your files from your secure dashboard.</p>
+            </div>
 
-            <div class="visual-stack" aria-hidden="true">
-                <div class="preview-card">
-                    <div class="abstract-header">
-                        <span></span>
-                        <span></span>
-                        <span></span>
+            <div class="status-window" aria-hidden="true">
+                <div class="window-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+
+                <div class="status-layout">
+                    <div class="folder-visual">
+                        <div class="folder-tab"></div>
+                        <div class="folder-body">
+                            <span class="folder-lock"></span>
+                        </div>
+                        <div class="folder-base"></div>
                     </div>
 
-                    <div class="abstract-body">
-                        <span class="abstract-lock"></span>
-                        <div class="abstract-lines">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+                    <div class="drive-status">
+                        <h2>Drive Status</h2>
+
+                        <div class="status-line">
+                            <span class="line-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <path d="M14 2v6h6"></path>
+                                    <path d="M8 13h4"></path>
+                                    <path d="M8 17h7"></path>
+                                </svg>
+                            </span>
+                            <div>
+                                <span class="line-label">Indexing files</span>
+                                <span class="animated-bar bar-one"></span>
+                            </div>
+                        </div>
+
+                        <div class="status-line">
+                            <span class="line-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
+                                    <path d="M3 21v-5h5"></path>
+                                    <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+                                    <path d="M21 3v5h-5"></path>
+                                </svg>
+                            </span>
+                            <div>
+                                <span class="line-label">Sync status</span>
+                                <span class="animated-bar bar-two"></span>
+                            </div>
+                        </div>
+
+                        <div class="status-line">
+                            <span class="line-icon">
+                                <svg viewBox="0 0 24 24">
+                                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path>
+                                    <path d="m9 12 2 2 4-5"></path>
+                                </svg>
+                            </span>
+                            <div>
+                                <span class="line-label">Access control</span>
+                                <span class="animated-bar bar-three"></span>
+                            </div>
                         </div>
                     </div>
-
-                    <p class="loading-caption">
-                        Preparing secure access to your file dashboard.
-                    </p>
                 </div>
             </div>
-        </div>
 
-        <div class="brand-footer">
-            <span class="status-dot"></span>
-            <span class="footer-rule"></span>
+            <div class="feature-row" aria-hidden="true">
+                <span>
+                    <svg viewBox="0 0 24 24"><path d="m13 2-8 12h7l-1 8 8-12h-7l1-8Z"></path></svg>
+                    Fast indexing
+                </span>
+                <span>
+                    <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"></path><path d="m9 12 2 2 4-5"></path></svg>
+                    Secure agent
+                </span>
+                <span>
+                    <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path><path d="M21 3v5h-5"></path></svg>
+                    Local sync
+                </span>
+            </div>
         </div>
     </section>
 
     <section class="form-panel">
         <div class="auth-card">
             <span class="eyebrow">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                    <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                </svg>
                 {% if auth_mode == "signup" %}Create Account{% else %}Secure Login{% endif %}
             </span>
 
@@ -76,9 +142,9 @@
 
             <p class="form-copy">
                 {% if auth_mode == "signup" %}
-                    Set up access to the protected {{ drive_label }} file dashboard.
+                    Set up secure access to your file dashboard.
                 {% else %}
-                    Sign in to continue to the {{ drive_label }} file dashboard.
+                    Sign in to continue to your file dashboard.
                 {% endif %}
             </p>
 
@@ -104,6 +170,12 @@
                 <div class="field-group">
                     <label for="{{ form.username.id_for_label }}">Username</label>
                     <div class="input-frame">
+                        <span class="field-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M20 21a8 8 0 0 0-16 0"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                            </svg>
+                        </span>
                         {{ form.username }}
                     </div>
                     {{ form.username.errors }}
@@ -113,6 +185,12 @@
                     <div class="field-group">
                         <label for="{{ form.password1.id_for_label }}">Password</label>
                         <div class="input-frame password-frame">
+                            <span class="field-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24">
+                                    <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                                    <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                                </svg>
+                            </span>
                             {{ form.password1 }}
                             <button
                                 type="button"
@@ -140,6 +218,12 @@
                     <div class="field-group">
                         <label for="{{ form.password2.id_for_label }}">Confirm password</label>
                         <div class="input-frame password-frame">
+                            <span class="field-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24">
+                                    <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                                    <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                                </svg>
+                            </span>
                             {{ form.password2 }}
                             <button
                                 type="button"
@@ -167,6 +251,12 @@
                     <div class="field-group">
                         <label for="{{ form.password.id_for_label }}">Password</label>
                         <div class="input-frame password-frame">
+                            <span class="field-icon" aria-hidden="true">
+                                <svg viewBox="0 0 24 24">
+                                    <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                                    <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                                </svg>
+                            </span>
                             {{ form.password }}
                             <button
                                 type="button"
@@ -190,12 +280,34 @@
                         </div>
                         {{ form.password.errors }}
                     </div>
+
+                    <div class="form-options">
+                        <label class="remember-option" for="remember_me">
+                            <input id="remember_me" type="checkbox" name="remember_me">
+                            <span>Remember me</span>
+                        </label>
+                    </div>
                 {% endif %}
 
                 <button type="submit" class="primary-button">
-                    {% if auth_mode == "signup" %}Create account{% else %}Sign in{% endif %}
+                    <span>{% if auth_mode == "signup" %}Create account{% else %}Sign in{% endif %}</span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m9 18 6-6-6-6"></path>
+                    </svg>
                 </button>
             </form>
+
+            <div class="auth-assurance" aria-hidden="true">
+                <span></span>
+                <p>
+                    <svg viewBox="0 0 24 24">
+                        <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                        <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                    </svg>
+                    Encrypted local authentication
+                </p>
+                <span></span>
+            </div>
 
             {% if auth_mode == "signup" %}
                 <p class="auth-switch">

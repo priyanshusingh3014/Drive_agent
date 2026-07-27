@@ -150,6 +150,16 @@ class AuthFlowTests(TestCase):
 
         self.assertContains(response, 'value="prefilled-admin"')
 
+    def test_login_page_renders_secure_dashboard_ui(self):
+        response = self.client.get("/login/")
+
+        self.assertContains(response, "Secure Drive Access.")
+        self.assertContains(response, "Drive Status")
+        self.assertContains(response, "Remember me")
+        self.assertContains(response, "bar-one")
+        self.assertContains(response, "bar-two")
+        self.assertContains(response, "bar-three")
+
 
 @override_settings(AGENT_API_TOKEN="test-token")
 class ActiveAgentHeartbeatTests(TestCase):

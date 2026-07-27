@@ -817,6 +817,22 @@ class AgentLoginView(LoginView):
         **drive_context(),
     }
 
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        form.fields["username"].widget.attrs.update(
+            {
+                "placeholder": "Enter your username",
+                "autocomplete": "username",
+            }
+        )
+        form.fields["password"].widget.attrs.update(
+            {
+                "placeholder": "Enter your password",
+                "autocomplete": "current-password",
+            }
+        )
+        return form
+
     def get_initial(self):
         initial = super().get_initial()
         username = self.request.GET.get("username", "").strip()
@@ -825,6 +841,16 @@ class AgentLoginView(LoginView):
             initial["username"] = username
 
         return initial
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+
+        if self.request.POST.get("remember_me"):
+            self.request.session.set_expiry(60 * 60 * 24 * 14)
+        else:
+            self.request.session.set_expiry(0)
+
+        return response
 
 
 def signup(request):
