@@ -632,6 +632,142 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertTrue(drive.count_complete)
         self.assertEqual(file_report.name, "Remote_Report.pdf")
 
+    def test_agent_rescan_preserves_previous_files_until_complete(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-rescan",
+            host_name="RESCAN-PC",
+            ip_address="192.168.1.81",
+            drive_count=1,
+            total_files=3,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=3,
+            indexed_files=3,
+            count_complete=True,
+            scan_id="old-scan",
+        )
+
+        for index in range(3):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=f"Old_File_{index}.txt",
+                folder="D:\\Work",
+                relative_path=f"Work\\Old_File_{index}.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+                reported_scan_id="old-scan",
+            )
+
+        partial_response = self.client.post(
+            "/agent-files-batch/",
+            data={
+                "agent_id": "remote-pc-rescan",
+                "host_name": "RESCAN-PC",
+                "drive_label": "D:\\",
+                "drive_value": "D:/",
+                "scan_id": "new-scan",
+                "batch_index": 0,
+                "indexed_files": 1,
+                "total_files": 1,
+                "scan_complete": False,
+                "files": [
+                    {
+                        "name": "Fresh_File.txt",
+                        "folder": "D:\\Work",
+                        "relative_path": "Work\\Fresh_File.txt",
+                        "extension": ".txt",
+                        "type_badge": "TXT",
+                        "type_class": "document",
+                        "type_label": "TXT",
+                        "size": "1 KB",
+                        "size_bytes": 1024,
+                        "modified_timestamp": 2000,
+                        "freshness_timestamp": 2000,
+                    }
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(partial_response.status_code, 200)
+        drive.refresh_from_db()
+        self.assertEqual(drive.total_files, 4)
+        self.assertEqual(drive.indexed_files, 4)
+        self.assertFalse(drive.count_complete)
+        self.assertEqual(drive.file_reports.count(), 4)
+
+        self.client.force_login(user)
+        self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-rescan"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        search_response = self.client.get(
+            "/files-data/",
+            data={"search": "Old_File_2"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        search_data = search_response.json()
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertEqual(search_data["dashboard"]["total_files_display"], "4")
+        self.assertIn("Old_File_2.txt", search_data["rows_html"])
+
+        complete_response = self.client.post(
+            "/agent-files-batch/",
+            data={
+                "agent_id": "remote-pc-rescan",
+                "host_name": "RESCAN-PC",
+                "drive_label": "D:\\",
+                "drive_value": "D:/",
+                "scan_id": "new-scan",
+                "batch_index": 1,
+                "indexed_files": 2,
+                "total_files": 2,
+                "scan_complete": True,
+                "files": [
+                    {
+                        "name": "Second_Fresh_File.txt",
+                        "folder": "D:\\Work",
+                        "relative_path": "Work\\Second_Fresh_File.txt",
+                        "extension": ".txt",
+                        "type_badge": "TXT",
+                        "type_class": "document",
+                        "type_label": "TXT",
+                        "size": "2 KB",
+                        "size_bytes": 2048,
+                        "modified_timestamp": 2100,
+                        "freshness_timestamp": 2100,
+                    }
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(complete_response.status_code, 200)
+        drive.refresh_from_db()
+        self.assertEqual(drive.total_files, 2)
+        self.assertEqual(drive.indexed_files, 2)
+        self.assertTrue(drive.count_complete)
+        self.assertEqual(
+            set(drive.file_reports.values_list("name", flat=True)),
+            {"Fresh_File.txt", "Second_Fresh_File.txt"},
+        )
+
     def test_agent_file_download_upload_stores_requested_file(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as download_root:
             with override_settings(REMOTE_FILE_DOWNLOAD_ROOT=Path(download_root)):

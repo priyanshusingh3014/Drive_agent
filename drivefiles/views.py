@@ -2081,27 +2081,49 @@ def agent_files_batch(request):
     if not isinstance(storage, dict):
         storage = {}
 
-    drive_report, _created = ActiveAgentDrive.objects.update_or_create(
+    scan_id = _safe_text(payload.get("scan_id"), 96)
+    scan_complete = bool(payload.get("scan_complete"))
+    incoming_total_files = _safe_int(payload.get("total_files"))
+    incoming_indexed_files = _safe_int(payload.get("indexed_files"))
+    storage_payload = {
+        "used_display": _safe_text(storage.get("used_display") or "Unavailable", 32),
+        "total_display": _safe_text(storage.get("total_display") or "Unavailable", 32),
+        "free_display": _safe_text(storage.get("free_display") or "Unavailable", 32),
+        "percent_used": _safe_percent(storage.get("percent_used")),
+    }
+    drive_report, _created = ActiveAgentDrive.objects.get_or_create(
         agent=agent,
         value=drive_value,
         defaults={
             "label": _safe_text(payload.get("drive_label") or drive_value, 32),
-            "total_files": _safe_int(payload.get("total_files")),
-            "indexed_files": _safe_int(payload.get("indexed_files")),
-            "count_complete": bool(payload.get("scan_complete")),
-            "storage": {
-                "used_display": _safe_text(storage.get("used_display") or "Unavailable", 32),
-                "total_display": _safe_text(storage.get("total_display") or "Unavailable", 32),
-                "free_display": _safe_text(storage.get("free_display") or "Unavailable", 32),
-                "percent_used": _safe_percent(storage.get("percent_used")),
-            },
-            "scan_id": _safe_text(payload.get("scan_id"), 96),
         },
     )
+    drive_report.label = _safe_text(payload.get("drive_label") or drive_value, 32)
+    drive_report.total_files = max(
+        drive_report.total_files,
+        drive_report.indexed_files,
+        incoming_total_files,
+        incoming_indexed_files,
+    )
+    drive_report.indexed_files = max(
+        drive_report.indexed_files,
+        incoming_indexed_files,
+    )
+    drive_report.count_complete = False
+    drive_report.storage = storage_payload
+    drive_report.scan_id = scan_id
+    drive_report.save(
+        update_fields=(
+            "label",
+            "total_files",
+            "indexed_files",
+            "count_complete",
+            "storage",
+            "scan_id",
+            "last_reported_at",
+        )
+    )
     batch_index = _safe_int(payload.get("batch_index"))
-
-    if batch_index == 0:
-        drive_report.file_reports.all().delete()
 
     raw_files = payload.get("files")
 
@@ -2130,7 +2152,7 @@ def agent_files_batch(request):
             ActiveAgentFile(
                 agent=agent,
                 drive=drive_report,
-                reported_scan_id=drive_report.scan_id,
+                reported_scan_id=scan_id,
                 **file_information,
             )
             for file_information in normalized_files
@@ -2138,17 +2160,32 @@ def agent_files_batch(request):
         batch_size=batch_limit,
     )
 
-    if payload.get("scan_complete") and not drive_report.total_files:
-        drive_report.total_files = drive_report.file_reports.count()
+    current_file_count = drive_report.file_reports.count()
 
-    if payload.get("scan_complete"):
-        drive_report.indexed_files = drive_report.file_reports.count()
+    if scan_complete:
+        if scan_id:
+            drive_report.file_reports.exclude(reported_scan_id=scan_id).delete()
+
+        current_file_count = drive_report.file_reports.count()
+        drive_report.total_files = current_file_count
+        drive_report.indexed_files = current_file_count
         drive_report.count_complete = True
         drive_report.save(
             update_fields=(
                 "total_files",
                 "indexed_files",
                 "count_complete",
+                "scan_id",
+                "last_reported_at",
+            )
+        )
+    elif current_file_count > drive_report.indexed_files:
+        drive_report.total_files = max(drive_report.total_files, current_file_count)
+        drive_report.indexed_files = current_file_count
+        drive_report.save(
+            update_fields=(
+                "total_files",
+                "indexed_files",
                 "last_reported_at",
             )
         )
