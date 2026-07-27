@@ -1125,6 +1125,7 @@
         }
 
         .table-wrap {
+            height: 100%;
             min-height: 0;
             overflow: auto;
             scrollbar-gutter: stable;
@@ -1161,6 +1162,7 @@
         table {
             width: 100%;
             min-width: 760px;
+            height: max-content;
             border-collapse: collapse;
             table-layout: fixed;
         }

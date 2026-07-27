@@ -974,10 +974,20 @@
             return true;
         }
 
+        function abortPassiveRefreshForScroll() {
+            if (refreshRequestController) {
+                refreshRequestController.abort();
+                refreshRequestController = null;
+                refreshRequestInFlight = false;
+            }
+        }
+
         async function loadNextScrollPage() {
-            if (!scrollNextPage || scrollPageInFlight || refreshRequestInFlight || dashboardActionInFlight) {
+            if (!scrollNextPage || scrollPageInFlight || dashboardActionInFlight) {
                 return;
             }
+
+            abortPassiveRefreshForScroll();
 
             const currentQuery = getSearchQuery();
             const requestedFilter = activeFilter;
@@ -1458,7 +1468,10 @@
                 }
 
                 applyFilesPayload(data, currentQuery, {
-                    preserveRows: !isPriorityRefresh && fileScrollAwayFromTop(),
+                    preserveRows: !isPriorityRefresh && (
+                        fileScrollAwayFromTop()
+                        || scrollLoadedPage > currentPage
+                    ),
                 });
             } catch (error) {
                 if (error.name === "AbortError") {
