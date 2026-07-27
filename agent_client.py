@@ -382,7 +382,7 @@ def should_self_install(args):
     if args.run_agent or args.once or args.unregister or args.uninstall:
         return False
 
-    return not _same_file(sys.executable, _installed_executable_path())
+    return True
 
 
 def install_and_start_agent(server_url, api_token):
