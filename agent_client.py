@@ -169,21 +169,16 @@ def _same_file(first_path, second_path):
         return Path(first_path).resolve() == Path(second_path).resolve()
 
 
-def _powershell_single_quote(value):
-    return str(value).replace("'", "''")
-
-
 def _startup_command(executable_path, server_url, api_token):
-    executable = _powershell_single_quote(executable_path)
-    server = _powershell_single_quote(server_url)
-    token = _powershell_single_quote(api_token)
-
-    return (
-        'powershell.exe -NoProfile -ExecutionPolicy Bypass '
-        '-WindowStyle Hidden -Command '
-        f'"Start-Process -WindowStyle Hidden -FilePath \'{executable}\' '
-        f'-ArgumentList @(\'--run-agent\',\'--server-url\',\'{server}\','
-        f'\'--api-token\',\'{token}\')"'
+    return " ".join(
+        [
+            _quoted_windows_argument(executable_path),
+            "--run-agent",
+            "--server-url",
+            _quoted_windows_argument(server_url),
+            "--api-token",
+            _quoted_windows_argument(api_token),
+        ]
     )
 
 

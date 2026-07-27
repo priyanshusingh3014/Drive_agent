@@ -59,7 +59,7 @@ function Test-PythonCommand {
 
 function Invoke-PyInstaller {
     if ((Test-Path -LiteralPath $VenvPyInstaller)) {
-        & $VenvPyInstaller --onefile --name DriveAgent agent_client.py
+        & $VenvPyInstaller --onefile --noconsole --name DriveAgent agent_client.py
 
         if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $DistExe)) {
             return
@@ -67,7 +67,7 @@ function Invoke-PyInstaller {
     }
 
     if ((Test-Path -LiteralPath $VenvPython)) {
-        & $VenvPython -m PyInstaller --onefile --name DriveAgent agent_client.py
+        & $VenvPython -m PyInstaller --onefile --noconsole --name DriveAgent agent_client.py
 
         if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $DistExe)) {
             return
@@ -76,7 +76,7 @@ function Invoke-PyInstaller {
 
     if ((Test-Path -LiteralPath $CodexPython)) {
         $env:PYTHONPATH = Join-Path $ProjectRoot "venv\Lib\site-packages"
-        & $CodexPython -m PyInstaller --onefile --name DriveAgent agent_client.py
+        & $CodexPython -m PyInstaller --onefile --noconsole --name DriveAgent agent_client.py
 
         if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $DistExe)) {
             return
@@ -85,7 +85,7 @@ function Invoke-PyInstaller {
 
     if (Test-PythonCommand @("py")) {
         $env:PYTHONPATH = Join-Path $ProjectRoot "venv\Lib\site-packages"
-        & py -m PyInstaller --onefile --name DriveAgent agent_client.py
+        & py -m PyInstaller --onefile --noconsole --name DriveAgent agent_client.py
 
         if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $DistExe)) {
             return
@@ -94,7 +94,7 @@ function Invoke-PyInstaller {
 
     if (Test-PythonCommand @("python")) {
         $env:PYTHONPATH = Join-Path $ProjectRoot "venv\Lib\site-packages"
-        & python -m PyInstaller --onefile --name DriveAgent agent_client.py
+        & python -m PyInstaller --onefile --noconsole --name DriveAgent agent_client.py
 
         if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $DistExe)) {
             return

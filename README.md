@@ -401,7 +401,7 @@ Copy only this file to the user PC:
 agent_download/DriveAgent.exe
 ```
 
-The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, a terminal opens briefly, the EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup and Windows Installed Apps for the current user, starts or restarts the hidden background agent, and then closes. The background agent keeps scanning after the terminal closes and reports that PC to `Active Users`. Future Windows startup launches are hidden and do not leave a terminal open.
+The user PC does not need to run Django. When the user double-clicks `DriveAgent.exe`, no terminal is shown. The EXE copies itself to `%LOCALAPPDATA%\DriveAgent\DriveAgent.exe`, registers itself in Windows startup and Windows Installed Apps for the current user, starts or restarts the hidden background agent, and exits. The background agent keeps scanning silently and reports that PC to `Active Users`. Future Windows startup launches are hidden too.
 
 During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` within seconds while full file scanning continues in the background. If the DriveAgent process is ended, heartbeats stop and the PC is hidden from Active Users after the configured online window, defaulting to 3 seconds. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
 
