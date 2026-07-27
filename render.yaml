@@ -18,7 +18,7 @@ services:
       - key: DRIVE_AGENT_ENABLE_LOCAL_SCANNER
         value: "False"
       - key: DRIVE_AGENT_ONLINE_SECONDS
-        value: "15"
+        value: "3"
       - key: DRIVE_AGENT_DEFAULT_DRIVE
         value: "D:/"
       - key: DRIVE_AGENT_DRIVE_PRIORITY
