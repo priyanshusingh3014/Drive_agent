@@ -164,6 +164,50 @@ def _safe_text(value, max_length, default=""):
     return text[:max_length]
 
 
+def _is_usable_agent_mac_address(value):
+    normalized_value = str(value or "").strip().lower()
+
+    return normalized_value not in {
+        "",
+        "00:00:00:00:00:00",
+        "none",
+        "unknown",
+        "unavailable",
+    }
+
+
+def _is_usable_agent_ip_address(value):
+    normalized_value = str(value or "").strip().lower()
+
+    return normalized_value not in {
+        "",
+        "0.0.0.0",
+        "none",
+        "unknown",
+        "unavailable",
+    }
+
+
+def _remove_duplicate_agent_reports(agent_id, host_name, mac_address, ip_address=""):
+    if not host_name:
+        return
+
+    duplicate_identity_query = Q()
+
+    if _is_usable_agent_mac_address(mac_address):
+        duplicate_identity_query |= Q(mac_address__iexact=mac_address)
+
+    if _is_usable_agent_ip_address(ip_address):
+        duplicate_identity_query |= Q(ip_address__iexact=ip_address)
+
+    if not duplicate_identity_query:
+        return
+
+    ActiveAgent.objects.filter(
+        host_name__iexact=host_name,
+    ).filter(duplicate_identity_query).exclude(agent_id=agent_id).delete()
+
+
 def _safe_float(value, default=0):
     try:
         return float(value)
@@ -368,7 +412,7 @@ def _build_active_agents(selected_agent_id=""):
         ActiveAgent.objects
         .filter(last_seen_at__gte=online_cutoff)
         .prefetch_related("drive_reports")
-        .order_by("-last_seen_at", "host_name")[:24]
+        .order_by("host_name", "agent_id")[:24]
     )
 
     if selected_agent_id and selected_agent_id not in {agent.agent_id for agent in agents}:
@@ -384,6 +428,7 @@ def _build_active_agents(selected_agent_id=""):
         if selected_agent:
             agents.append(selected_agent)
 
+    agents.sort(key=lambda agent: (agent.host_name.lower(), agent.agent_id))
     active_agents = []
 
     for agent in agents:
@@ -483,7 +528,7 @@ def _auto_selected_hosted_agent():
     online_agents = list(
         ActiveAgent.objects
         .filter(last_seen_at__gte=_active_agent_cutoff())
-        .order_by("-last_seen_at")[:2]
+        .order_by("host_name", "agent_id")[:2]
     )
 
     if len(online_agents) == 1:
@@ -1852,6 +1897,7 @@ def agent_heartbeat(request):
     mac_address = str(payload.get("mac_address") or "")[:64]
     os_label = str(payload.get("os_label") or "")[:128]
     architecture = str(payload.get("architecture") or "")[:64]
+    _remove_duplicate_agent_reports(agent_id, host_name, mac_address, ip_address)
     latest_payload = {
         "drives": drives,
         "reported_at": timezone.now().isoformat(),
@@ -1990,21 +2036,28 @@ def agent_files_batch(request):
             status=400,
         )
 
+    host_name = _safe_text(payload.get("host_name") or agent_id, 255)
+    ip_address = _safe_text(
+        payload.get("ip_address") or request.META.get("REMOTE_ADDR", ""),
+        64,
+    )
+    mac_address = _safe_text(payload.get("mac_address"), 64)
+    os_label = _safe_text(payload.get("os_label"), 128)
+    architecture = _safe_text(payload.get("architecture"), 64)
+    _remove_duplicate_agent_reports(agent_id, host_name, mac_address, ip_address)
+
     agent, _created = ActiveAgent.objects.get_or_create(
         agent_id=agent_id,
         defaults={
-            "host_name": _safe_text(payload.get("host_name") or agent_id, 255),
-            "ip_address": request.META.get("REMOTE_ADDR", ""),
+            "host_name": host_name,
+            "ip_address": ip_address,
         },
     )
-    agent.host_name = _safe_text(payload.get("host_name") or agent.host_name or agent_id, 255)
-    agent.ip_address = _safe_text(
-        payload.get("ip_address") or agent.ip_address or request.META.get("REMOTE_ADDR", ""),
-        64,
-    )
-    agent.mac_address = _safe_text(payload.get("mac_address") or agent.mac_address, 64)
-    agent.os_label = _safe_text(payload.get("os_label") or agent.os_label, 128)
-    agent.architecture = _safe_text(payload.get("architecture") or agent.architecture, 64)
+    agent.host_name = host_name or agent.host_name or agent_id
+    agent.ip_address = ip_address or agent.ip_address
+    agent.mac_address = mac_address or agent.mac_address
+    agent.os_label = os_label or agent.os_label
+    agent.architecture = architecture or agent.architecture
     storage = payload.get("storage")
 
     if not isinstance(storage, dict):

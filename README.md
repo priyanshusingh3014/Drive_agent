@@ -405,6 +405,8 @@ The user PC does not need to run Django. When the user double-clicks `DriveAgent
 
 During install, the EXE immediately sends an initial heartbeat with host name, IP address, MAC address, OS, architecture, and all available drive names. This makes the PC and its drives appear under `Active Users` within seconds while full file scanning continues in the background. If the DriveAgent process is ended, heartbeats stop and the PC is hidden from Active Users after the configured online window, defaulting to 3 seconds. File metadata then streams to Render in batches and the dashboard updates after selecting that hostname.
 
+Active Users is sorted by hostname and agent id, not by the newest heartbeat, so users stay fixed in position while live heartbeats arrive. If an older agent build reports the same hostname and matching MAC or IP address under a different id, the server removes the older duplicate so one physical PC appears only once.
+
 The installed EXE does not create `agent.log` or any text file by default. For debugging only, set `DRIVE_AGENT_LOG_FILE=1` or set `DRIVE_AGENT_LOG_FILE` to a full log path before running the agent.
 
 The user download folder intentionally contains only:
@@ -467,6 +469,7 @@ $env:DRIVE_AGENT_ROOT = "E:/"
 - Select a reported drive for the selected Active User and the file table, storage card, file type distribution, totals, and host/IP/MAC area update to that PC.
 - User agents send heartbeats every 1 second by default, watch Windows drive changes, and report changed drive data after additions, edits, and deletions.
 - Active Users shows only PCs that are currently heartbeating. If DriveAgent is ended, the PC is hidden after the configured heartbeat window, defaulting to 3 seconds.
+- Active Users stays in stable hostname order and deduplicates repeated reports from the same hostname plus MAC or IP address.
 - User agents scan drives in the configured priority order, and selected remote drives are requested through heartbeat so the first batch appears quickly while the remaining drive data streams.
 - Uninstalling the DriveAgent user package removes that PC from Active Users.
 - Agent heartbeat API protected by a shared token.

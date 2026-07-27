@@ -286,6 +286,110 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["online_agents"], 0)
         self.assertEqual(data["agents"], [])
 
+    def test_active_agents_data_uses_stable_hostname_order(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        ActiveAgent.objects.create(
+            agent_id="beta-pc",
+            host_name="BETA-PC",
+            ip_address="192.168.1.42",
+        )
+        ActiveAgent.objects.create(
+            agent_id="alpha-pc",
+            host_name="ALPHA-PC",
+            ip_address="192.168.1.41",
+        )
+        ActiveAgent.objects.filter(agent_id="beta-pc").update(
+            last_seen_at=timezone.now(),
+        )
+        ActiveAgent.objects.filter(agent_id="alpha-pc").update(
+            last_seen_at=timezone.now() - timedelta(seconds=1),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get("/active-agents-data/")
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [agent["host_name"] for agent in data["agents"]],
+            ["ALPHA-PC", "BETA-PC"],
+        )
+
+    def test_agent_heartbeat_replaces_duplicate_same_pc_identity(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        duplicate_agent = ActiveAgent.objects.create(
+            agent_id="old-duplicate-id",
+            host_name="DUPLICATE-PC",
+            ip_address="192.168.1.50",
+            mac_address="AA:BB:CC:DD:EE:FF",
+            drive_count=1,
+            total_files=1,
+        )
+        duplicate_drive = ActiveAgentDrive.objects.create(
+            agent=duplicate_agent,
+            label="D:\\",
+            value="D:/",
+            total_files=1,
+            indexed_files=1,
+        )
+        ActiveAgentFile.objects.create(
+            agent=duplicate_agent,
+            drive=duplicate_drive,
+            name="Old_Duplicate.txt",
+            folder="D:\\Old",
+            relative_path="Old\\Old_Duplicate.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+        )
+
+        heartbeat_response = self.client.post(
+            "/agent-heartbeat/",
+            data={
+                "agent_id": "new-duplicate-id",
+                "host_name": "DUPLICATE-PC",
+                "ip_address": "192.168.1.50",
+                "mac_address": "11:22:33:44:55:66",
+                "drives": [
+                    {
+                        "label": "D:\\",
+                        "value": "D:/",
+                        "total_files": 2,
+                    }
+                ],
+            },
+            content_type="application/json",
+            HTTP_X_AGENT_TOKEN="test-token",
+        )
+
+        self.assertEqual(heartbeat_response.status_code, 200)
+        self.assertFalse(
+            ActiveAgent.objects.filter(agent_id="old-duplicate-id").exists()
+        )
+        self.assertFalse(
+            ActiveAgentFile.objects.filter(agent__agent_id="old-duplicate-id").exists()
+        )
+        self.assertTrue(
+            ActiveAgent.objects.filter(agent_id="new-duplicate-id").exists()
+        )
+
+        self.client.force_login(user)
+        active_response = self.client.get("/active-agents-data/")
+        active_data = active_response.json()
+
+        self.assertEqual(active_response.status_code, 200)
+        self.assertEqual(active_data["total_agents"], 1)
+        self.assertEqual(active_data["agents"][0]["agent_id"], "new-duplicate-id")
+
     def test_agent_heartbeat_does_not_select_remote_user_in_sidebar_feed(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
