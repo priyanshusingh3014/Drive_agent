@@ -10,7 +10,7 @@
     >
 
     <title>{{ dashboard_title }}</title>
-    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260727-selected-drive-metrics">
+    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260727-agent-selection-fix">
 </head>
 
 <body>
@@ -539,6 +539,8 @@
         let scrollFramePending = false;
         let scrollLoadedPage = currentPage;
         let scrollNextPage = {{ has_next_page|yesno:"true,false" }} ? currentPage + 1 : null;
+        let activeAgentsRequestController = null;
+        let activeAgentsRequestSequence = 0;
         let scrollLoadedStartDisplay = "{{ page_start_display|escapejs }}";
         let scrollLoadedEndDisplay = "{{ page_end_display|escapejs }}";
         let scrollTotalDisplay = "{{ total_matching_display|escapejs }}";
@@ -1093,6 +1095,15 @@
             scrollPageInFlight = false;
         }
 
+        function cancelActiveAgentsRequest() {
+            if (activeAgentsRequestController) {
+                activeAgentsRequestController.abort();
+                activeAgentsRequestController = null;
+            }
+
+            activeAgentsRequestSequence += 1;
+        }
+
         function updateActiveAgentSelection() {
             if (!activeAgentsListElement) {
                 return;
@@ -1167,8 +1178,6 @@
                 window.setTimeout(function () {
                     selectAgent("");
                 }, 0);
-            } else if (data.selected_agent_id) {
-                selectedAgentId = data.selected_agent_id || "";
             }
 
             if (activeAgentsOnlineElement) {
@@ -1311,6 +1320,7 @@
             closeMenus();
             clearSearchInputs();
             cancelRefreshRequest();
+            cancelActiveAgentsRequest();
             const previousSelectedAgentId = selectedAgentId;
             activeFilter = "all";
             currentPage = 1;
@@ -1650,17 +1660,28 @@
                 return;
             }
 
+            if (activeAgentsRequestController) {
+                return;
+            }
+
+            let requestSequence = 0;
+
             try {
                 const params = new URLSearchParams();
+                const requestedSelectedAgentId = selectedAgentId;
+                requestSequence = ++activeAgentsRequestSequence;
 
-                if (selectedAgentId) {
-                    params.set("agent_id", selectedAgentId);
+                if (requestedSelectedAgentId) {
+                    params.set("agent_id", requestedSelectedAgentId);
                 }
 
                 const requestUrl = params.toString()
                     ? `${activeAgentsUrl}?${params.toString()}`
                     : activeAgentsUrl;
+                activeAgentsRequestController = new AbortController();
+                const requestController = activeAgentsRequestController;
                 const response = await fetch(requestUrl, {
+                    signal: requestController.signal,
                     headers: {
                         "X-Requested-With": "XMLHttpRequest",
                     },
@@ -1670,9 +1691,26 @@
                     return;
                 }
 
-                renderActiveAgents(await response.json());
+                const data = await response.json();
+
+                if (
+                    requestSequence !== activeAgentsRequestSequence
+                    || requestedSelectedAgentId !== selectedAgentId
+                ) {
+                    return;
+                }
+
+                renderActiveAgents(data);
             } catch (error) {
+                if (error.name === "AbortError") {
+                    return;
+                }
+
                 console.error("Unable to refresh active users.", error);
+            } finally {
+                if (requestSequence === activeAgentsRequestSequence) {
+                    activeAgentsRequestController = null;
+                }
             }
         }
 
