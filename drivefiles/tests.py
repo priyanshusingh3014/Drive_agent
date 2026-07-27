@@ -1137,6 +1137,90 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertNotIn("D_File_24.txt", data["rows_html"])
         self.assertNotIn("D_File_04.txt", data["rows_html"])
 
+    def test_remote_agent_file_type_filter_returns_only_selected_type(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-filter",
+            host_name="FILTER-PC",
+            ip_address="192.168.1.96",
+            drive_count=1,
+            total_files=6,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=6,
+            indexed_files=6,
+            count_complete=True,
+        )
+        files = [
+            ("Project_Report.DOCX", ".DOCX", "Document", "document"),
+            ("Meeting_Notes.PDF", ".PDF", "PDF", "pdf"),
+            ("Deck.PPTX", ".PPTX", "PPT", "document"),
+            ("Team_Photo.JPG", ".JPG", "IMG", "image"),
+            ("Design_Board.PNG", ".PNG", "IMG", "image"),
+            ("Backup.ZIP", ".ZIP", "ZIP", "archive"),
+        ]
+
+        for index, (name, extension, badge, type_class) in enumerate(files):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=name,
+                folder="D:\\Mixed",
+                relative_path=f"Mixed\\{name}",
+                extension=extension,
+                type_badge=badge,
+                type_class=type_class,
+                type_label=extension.strip("."),
+                size="1 KB",
+                size_bytes=1024,
+                freshness_timestamp=index,
+            )
+
+        self.client.force_login(user)
+        select_response = self.client.post(
+            "/select-agent/",
+            data={"agent_id": "remote-pc-filter"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(select_response.status_code, 200)
+
+        documents_response = self.client.get(
+            "/files-data/",
+            data={"type": "documents"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        documents_data = documents_response.json()
+
+        self.assertEqual(documents_response.status_code, 200)
+        self.assertEqual(documents_data["pagination"]["total_matching_display"], "3")
+        self.assertIn("Project_Report.DOCX", documents_data["rows_html"])
+        self.assertIn("Meeting_Notes.PDF", documents_data["rows_html"])
+        self.assertIn("Deck.PPTX", documents_data["rows_html"])
+        self.assertNotIn("Team_Photo.JPG", documents_data["rows_html"])
+        self.assertNotIn("Design_Board.PNG", documents_data["rows_html"])
+        self.assertNotIn("Backup.ZIP", documents_data["rows_html"])
+
+        images_response = self.client.get(
+            "/files-data/",
+            data={"type": "images"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        images_data = images_response.json()
+
+        self.assertEqual(images_response.status_code, 200)
+        self.assertEqual(images_data["pagination"]["total_matching_display"], "2")
+        self.assertIn("Team_Photo.JPG", images_data["rows_html"])
+        self.assertIn("Design_Board.PNG", images_data["rows_html"])
+        self.assertNotIn("Project_Report.DOCX", images_data["rows_html"])
+        self.assertNotIn("Meeting_Notes.PDF", images_data["rows_html"])
+        self.assertNotIn("Backup.ZIP", images_data["rows_html"])
+
     def test_selecting_remote_drive_queues_priority_scan_for_agent(self):
         user = get_user_model().objects.create_user(
             username="admin-user",

@@ -330,10 +330,15 @@ def _normalize_agent_file(raw_file):
     if not relative_path or not name:
         return None
 
-    extension = _safe_text(raw_file.get("extension"), 64)
+    extension = _safe_text(raw_file.get("extension"), 64).strip()
 
     if not extension and "." in name:
         extension = f".{name.rsplit('.', 1)[-1]}"
+
+    if extension.lower() == "no extension":
+        extension = "No extension"
+    elif extension:
+        extension = extension.lower()
 
     return {
         "relative_path": relative_path,
@@ -341,7 +346,7 @@ def _normalize_agent_file(raw_file):
         "folder": _safe_text(raw_file.get("folder"), 2048),
         "extension": extension or "No extension",
         "type_badge": _safe_text(raw_file.get("type_badge") or "FILE", 16),
-        "type_class": _safe_text(raw_file.get("type_class") or "other", 32),
+        "type_class": _safe_text(raw_file.get("type_class") or "other", 32).lower(),
         "type_label": _safe_text(raw_file.get("type_label") or extension or "File", 64),
         "size": _safe_text(raw_file.get("size") or "0 bytes", 32),
         "size_bytes": _safe_int(raw_file.get("size_bytes")),
@@ -1141,6 +1146,24 @@ def _remote_search_q(search_query):
     )
 
 
+def _extension_query(extensions):
+    query = Q()
+
+    for extension in extensions:
+        query |= Q(extension__iexact=extension)
+
+    return query
+
+
+def _type_class_query(type_classes):
+    query = Q()
+
+    for type_class in type_classes:
+        query |= Q(type_class__iexact=type_class)
+
+    return query
+
+
 def _remote_type_q(filter_type):
     if filter_type == "all":
         return Q()
@@ -1166,10 +1189,10 @@ def _remote_type_q(filter_type):
         return ~known_type_q
 
     group = FILE_TYPE_GROUP_BY_KEY[filter_type]
-    query = Q(type_class__in=category_classes.get(filter_type, ()))
+    query = _type_class_query(category_classes.get(filter_type, ()))
 
     if group["extensions"]:
-        query |= Q(extension__in=group["extensions"])
+        query |= _extension_query(group["extensions"])
 
     return query
 

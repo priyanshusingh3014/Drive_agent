@@ -316,7 +316,9 @@
                                 <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
                                     <path d="M3 4h18l-7 8v6l-4 2v-8z"></path>
                                 </svg>
-                                Filter
+                                <span data-filter-label>
+                                    {% for option in filter_options %}{% if filter_type == option.value %}{{ option.label }}{% endif %}{% endfor %}
+                                </span>
                             </button>
 
                             <div class="dropdown-menu filter-menu" data-filter-menu hidden>
@@ -507,6 +509,7 @@
         const pageSummaryElement = document.querySelector("[data-page-summary]");
         const paginationControlsElement = document.querySelector("[data-pagination-controls]");
         const filterToggle = document.querySelector("[data-filter-toggle]");
+        const filterLabelElement = document.querySelector("[data-filter-label]");
         const filterMenu = document.querySelector("[data-filter-menu]");
         const profileToggle = document.querySelector("[data-profile-toggle]");
         const profileMenu = document.querySelector("[data-profile-menu]");
@@ -616,12 +619,23 @@
         }
 
         function updateFilterButtons() {
+            let activeFilterLabel = "All Files";
+
             document.querySelectorAll("[data-filter-value]").forEach(function (button) {
-                button.classList.toggle("active", button.dataset.filterValue === activeFilter);
+                const isActive = button.dataset.filterValue === activeFilter;
+                button.classList.toggle("active", isActive);
+
+                if (isActive) {
+                    activeFilterLabel = button.textContent.trim() || activeFilterLabel;
+                }
             });
 
             if (filterToggle) {
                 filterToggle.classList.toggle("active", activeFilter !== "all");
+            }
+
+            if (filterLabelElement) {
+                filterLabelElement.textContent = activeFilterLabel;
             }
         }
 
