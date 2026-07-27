@@ -330,6 +330,51 @@ class ActiveAgentHeartbeatTests(TestCase):
         self.assertEqual(data["online_agents"], 0)
         self.assertEqual(data["agents"], [])
 
+    def test_active_agents_data_keeps_selected_existing_agent_when_offline(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        ActiveAgent.objects.create(
+            agent_id="offline-selected-pc",
+            host_name="OFFLINE-SELECTED-PC",
+            ip_address="192.168.1.45",
+        )
+        ActiveAgent.objects.filter(agent_id="offline-selected-pc").update(
+            last_seen_at=timezone.now() - timedelta(minutes=10),
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/active-agents-data/",
+            data={"agent_id": "offline-selected-pc"},
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["total_agents"], 0)
+        self.assertEqual(data["agents"], [])
+        self.assertEqual(data["selected_agent_id"], "offline-selected-pc")
+        self.assertFalse(data["selected_agent_online"])
+        self.assertFalse(data["selected_agent_removed"])
+
+    def test_active_agents_data_marks_removed_selected_agent(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/active-agents-data/",
+            data={"agent_id": "removed-selected-pc"},
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "")
+        self.assertTrue(data["selected_agent_removed"])
+
     def test_active_agents_data_uses_stable_first_seen_order(self):
         user = get_user_model().objects.create_user(
             username="admin-user",
@@ -1260,6 +1305,142 @@ class ActiveAgentHeartbeatTests(TestCase):
 
         self.assertNotIn("D_File_24.txt", data["rows_html"])
         self.assertNotIn("D_File_04.txt", data["rows_html"])
+
+    def test_remote_agent_file_pagination_uses_explicit_agent_without_session(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-explicit-pagination",
+            host_name="EXPLICIT-PAGE-PC",
+            ip_address="192.168.1.104",
+            drive_count=1,
+            total_files=22,
+        )
+        drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=22,
+            indexed_files=22,
+            count_complete=True,
+        )
+
+        for index in range(22):
+            ActiveAgentFile.objects.create(
+                agent=agent,
+                drive=drive,
+                name=f"Explicit_D_File_{index:02d}.txt",
+                folder="D:\\Work",
+                relative_path=f"Work\\Explicit_D_File_{index:02d}.txt",
+                extension=".txt",
+                type_badge="TXT",
+                type_class="document",
+                type_label="TXT",
+                size="1 KB",
+                size_bytes=1024,
+                freshness_timestamp=index,
+            )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/files-data/",
+            data={
+                "agent_id": "remote-pc-explicit-pagination",
+                "drive_root": "D:/",
+                "scope": "files",
+                "page": 2,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "remote-pc-explicit-pagination")
+        self.assertEqual(data["selected_drive_value"], "D:/")
+        self.assertEqual(data["pagination"]["page_number"], 2)
+        self.assertEqual(data["pagination"]["page_start_display"], "11")
+        self.assertEqual(data["pagination"]["page_end_display"], "20")
+
+        for index in range(2, 12):
+            self.assertIn(f"Explicit_D_File_{index:02d}.txt", data["rows_html"])
+
+        self.assertNotIn("Explicit_D_File_21.txt", data["rows_html"])
+        self.assertNotIn("Explicit_D_File_01.txt", data["rows_html"])
+
+    def test_remote_agent_explicit_drive_without_session(self):
+        user = get_user_model().objects.create_user(
+            username="admin-user",
+            password="pass-12345",
+        )
+        agent = ActiveAgent.objects.create(
+            agent_id="remote-pc-explicit-drive",
+            host_name="EXPLICIT-DRIVE-PC",
+            ip_address="192.168.1.105",
+            drive_count=2,
+            total_files=2,
+        )
+        d_drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="D:\\",
+            value="D:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+        c_drive = ActiveAgentDrive.objects.create(
+            agent=agent,
+            label="C:\\",
+            value="C:/",
+            total_files=1,
+            indexed_files=1,
+            count_complete=True,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=d_drive,
+            name="Remote_D_File.txt",
+            folder="D:\\Work",
+            relative_path="Work\\Remote_D_File.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+        )
+        ActiveAgentFile.objects.create(
+            agent=agent,
+            drive=c_drive,
+            name="Remote_C_File.txt",
+            folder="C:\\Work",
+            relative_path="Work\\Remote_C_File.txt",
+            extension=".txt",
+            type_badge="TXT",
+            type_class="document",
+            type_label="TXT",
+            size="1 KB",
+            size_bytes=1024,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            "/files-data/",
+            data={
+                "agent_id": "remote-pc-explicit-drive",
+                "drive_root": "C:/",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["selected_agent_id"], "remote-pc-explicit-drive")
+        self.assertEqual(data["selected_drive_value"], "C:/")
+        self.assertEqual(data["dashboard"]["drive_label"], "C:\\")
+        self.assertIn("Remote_C_File.txt", data["rows_html"])
+        self.assertNotIn("Remote_D_File.txt", data["rows_html"])
 
     def test_remote_agent_file_type_filter_returns_only_selected_type(self):
         user = get_user_model().objects.create_user(

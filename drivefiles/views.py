@@ -471,15 +471,23 @@ def _build_active_agents(selected_agent_id=""):
 
 
 def _active_agents_json_payload(selected_agent_id=""):
+    selected_agent_id = _safe_text(selected_agent_id, 128).strip()
     active_agents = _build_active_agents(selected_agent_id)
     active_agent_ids = {agent["agent_id"] for agent in active_agents}
-    selected_agent_id = selected_agent_id if selected_agent_id in active_agent_ids else ""
+    selected_agent_exists = (
+        ActiveAgent.objects.filter(agent_id=selected_agent_id).exists()
+        if selected_agent_id
+        else False
+    )
+    selected_agent_removed = bool(selected_agent_id and not selected_agent_exists)
 
     return {
         "agents": active_agents,
         "total_agents": len(active_agents),
         "online_agents": sum(1 for agent in active_agents if agent["is_online"]),
-        "selected_agent_id": selected_agent_id or "",
+        "selected_agent_id": selected_agent_id if selected_agent_exists else "",
+        "selected_agent_online": selected_agent_id in active_agent_ids,
+        "selected_agent_removed": selected_agent_removed,
     }
 
 
@@ -546,47 +554,71 @@ def _auto_selected_hosted_agent():
     return None
 
 
-def _get_selected_agent(request):
-    agent_id = _get_selected_agent_id(request)
+def _active_agent_queryset(require_online=True):
+    queryset = ActiveAgent.objects.all()
+
+    if require_online:
+        queryset = queryset.filter(last_seen_at__gte=_active_agent_cutoff())
+
+    return queryset
+
+
+def _get_selected_agent(
+    request,
+    requested_agent_id="",
+    require_online=True,
+    persist_session=True,
+    allow_auto_select=True,
+):
+    agent_id = _safe_text(requested_agent_id, 128).strip() or _get_selected_agent_id(request)
 
     if not agent_id:
-        hosted_agent = _auto_selected_hosted_agent()
+        hosted_agent = _auto_selected_hosted_agent() if allow_auto_select else None
 
         if hosted_agent:
-            _set_selected_agent(request, hosted_agent.agent_id)
+            if persist_session:
+                _set_selected_agent(request, hosted_agent.agent_id)
+
             _queue_agent_drive_scan(
                 hosted_agent,
-                _get_selected_agent_drive_value(request, hosted_agent),
+                _get_selected_agent_drive_value(
+                    request,
+                    hosted_agent,
+                    persist_session=persist_session,
+                ),
             )
             return hosted_agent
 
         return None
 
-    try:
-        agent = ActiveAgent.objects.get(agent_id=agent_id)
-    except ActiveAgent.DoesNotExist:
-        request.session.pop(SELECTED_AGENT_SESSION_KEY, None)
-        request.session.pop(SELECTED_AGENT_DRIVE_SESSION_KEY, None)
-        request.session.modified = True
+    agent = _active_agent_queryset(require_online=require_online).filter(
+        agent_id=agent_id,
+    ).first()
+
+    if not agent:
+        if persist_session and agent_id == _get_selected_agent_id(request):
+            request.session.pop(SELECTED_AGENT_SESSION_KEY, None)
+            request.session.pop(SELECTED_AGENT_DRIVE_SESSION_KEY, None)
+            request.session.modified = True
+
         return None
 
-    if not _agent_is_online(agent):
-        _set_selected_agent(request, "")
-        return None
+    if persist_session and requested_agent_id:
+        _set_selected_agent(request, agent.agent_id)
 
     return agent
 
 
 def _validated_selected_agent_id(request):
-    agent_id = _get_selected_agent_id(request)
+    agent_id = _safe_text(
+        request.GET.get("agent_id") or request.POST.get("agent_id"),
+        128,
+    ).strip() or _get_selected_agent_id(request)
 
     if not agent_id:
         return ""
 
-    if ActiveAgent.objects.filter(
-        agent_id=agent_id,
-        last_seen_at__gte=_active_agent_cutoff(),
-    ).exists():
+    if ActiveAgent.objects.filter(agent_id=agent_id).exists():
         return agent_id
 
     request.session.pop(SELECTED_AGENT_SESSION_KEY, None)
@@ -605,12 +637,25 @@ def _set_selected_agent(request, agent_id):
     request.session.modified = True
 
 
-def _get_selected_agent_drive_value(request, agent):
-    selected_value = str(request.session.get(SELECTED_AGENT_DRIVE_SESSION_KEY) or "")
+def _get_selected_agent_drive_value(
+    request,
+    agent,
+    requested_drive_value="",
+    persist_session=True,
+):
+    selected_value = str(
+        requested_drive_value
+        or request.session.get(SELECTED_AGENT_DRIVE_SESSION_KEY)
+        or ""
+    )
     drive_reports = _ordered_agent_drive_reports(agent.drive_reports.all())
     available_values = {drive_report.value for drive_report in drive_reports}
 
     if selected_value in available_values:
+        if persist_session:
+            request.session[SELECTED_AGENT_DRIVE_SESSION_KEY] = selected_value
+            request.session.modified = True
+
         return selected_value
 
     preferred_drive = _preferred_agent_drive_report(drive_reports)
@@ -618,8 +663,10 @@ def _get_selected_agent_drive_value(request, agent):
     if not preferred_drive:
         return ""
 
-    request.session[SELECTED_AGENT_DRIVE_SESSION_KEY] = preferred_drive.value
-    request.session.modified = True
+    if persist_session:
+        request.session[SELECTED_AGENT_DRIVE_SESSION_KEY] = preferred_drive.value
+        request.session.modified = True
+
     return preferred_drive.value
 
 
@@ -1678,8 +1725,18 @@ def _format_datetime_parts(value):
     }
 
 
-def _build_agent_files_context(request, selected_agent):
-    selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+def _build_agent_files_context(
+    request,
+    selected_agent,
+    requested_drive_value="",
+    persist_drive_selection=True,
+):
+    selected_drive_value = _get_selected_agent_drive_value(
+        request,
+        selected_agent,
+        requested_drive_value=requested_drive_value,
+        persist_session=persist_drive_selection,
+    )
     selected_drive = (
         selected_agent.drive_reports.filter(value=selected_drive_value).first()
         if selected_drive_value
@@ -1764,8 +1821,18 @@ def _build_agent_files_context(request, selected_agent):
     }
 
 
-def _build_agent_files_only_context(request, selected_agent):
-    selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+def _build_agent_files_only_context(
+    request,
+    selected_agent,
+    requested_drive_value="",
+    persist_drive_selection=True,
+):
+    selected_drive_value = _get_selected_agent_drive_value(
+        request,
+        selected_agent,
+        requested_drive_value=requested_drive_value,
+        persist_session=persist_drive_selection,
+    )
     selected_drive = (
         selected_agent.drive_reports.filter(value=selected_drive_value).first()
         if selected_drive_value
@@ -1836,7 +1903,7 @@ def _build_agent_files_only_context(request, selected_agent):
 
 
 def _build_drive_files_context(request, selected_drive_root=None, scanner_ready=False):
-    selected_agent = _get_selected_agent(request)
+    selected_agent = _get_selected_agent(request, require_online=False)
 
     if selected_agent:
         return _build_agent_files_context(request, selected_agent)
@@ -1921,11 +1988,27 @@ def _files_only_requested(request):
 
 @login_required
 def drive_files_data(request):
-    selected_agent = _get_selected_agent(request)
+    requested_agent_id = _safe_text(request.GET.get("agent_id"), 128).strip()
+    requested_drive_value = _safe_text(request.GET.get("drive_root"), 64).strip()
+    allow_live_auto_select = bool(
+        not requested_agent_id and not _local_drive_scanner_enabled()
+    )
+    selected_agent = _get_selected_agent(
+        request,
+        requested_agent_id=requested_agent_id,
+        require_online=False,
+        persist_session=allow_live_auto_select,
+        allow_auto_select=allow_live_auto_select,
+    )
     files_only = _files_only_requested(request)
 
     if selected_agent:
-        selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+        selected_drive_value = _get_selected_agent_drive_value(
+            request,
+            selected_agent,
+            requested_drive_value=requested_drive_value,
+            persist_session=False,
+        )
         selected_drive = (
             selected_agent.drive_reports.filter(value=selected_drive_value).first()
             if selected_drive_value
@@ -1954,11 +2037,21 @@ def drive_files_data(request):
             )
 
         if files_only:
-            context = _build_agent_files_only_context(request, selected_agent)
+            context = _build_agent_files_only_context(
+                request,
+                selected_agent,
+                requested_drive_value=requested_drive_value,
+                persist_drive_selection=False,
+            )
 
             return _files_only_json_response(context, request=request)
 
-        context = _build_agent_files_context(request, selected_agent)
+        context = _build_agent_files_context(
+            request,
+            selected_agent,
+            requested_drive_value=requested_drive_value,
+            persist_drive_selection=False,
+        )
 
         return _drive_files_json_response(context, request=request)
 
@@ -2004,7 +2097,12 @@ def drive_files_data(request):
 
 @login_required
 def active_agents_data(request):
-    return JsonResponse(_active_agents_json_payload(_validated_selected_agent_id(request)))
+    selected_agent_id = _safe_text(request.GET.get("agent_id"), 128).strip()
+
+    if not selected_agent_id:
+        selected_agent_id = _validated_selected_agent_id(request)
+
+    return JsonResponse(_active_agents_json_payload(selected_agent_id))
 
 
 def agent_ping(request):
@@ -2615,7 +2713,14 @@ def select_agent(request):
 @login_required
 @require_POST
 def select_drive(request):
-    selected_agent = _get_selected_agent(request)
+    requested_agent_id = _safe_text(request.POST.get("agent_id"), 128).strip()
+    selected_agent = _get_selected_agent(
+        request,
+        requested_agent_id=requested_agent_id,
+        require_online=False,
+        persist_session=True,
+        allow_auto_select=False,
+    )
 
     if selected_agent:
         selected_drive_value = _set_selected_agent_drive_value(
@@ -2678,10 +2783,21 @@ def select_drive(request):
 @login_required
 @require_POST
 def scan_now(request):
-    selected_agent = _get_selected_agent(request)
+    requested_agent_id = _safe_text(request.POST.get("agent_id"), 128).strip()
+    selected_agent = _get_selected_agent(
+        request,
+        requested_agent_id=requested_agent_id,
+        require_online=False,
+        persist_session=bool(requested_agent_id),
+        allow_auto_select=False,
+    )
 
     if selected_agent:
-        selected_drive_value = _get_selected_agent_drive_value(request, selected_agent)
+        selected_drive_value = _get_selected_agent_drive_value(
+            request,
+            selected_agent,
+            requested_drive_value=_safe_text(request.POST.get("drive_root"), 64).strip(),
+        )
         _queue_agent_drive_scan(selected_agent, selected_drive_value)
 
         return JsonResponse(

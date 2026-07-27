@@ -535,6 +535,7 @@
         let refreshRequestInFlight = false;
         let searchRefreshTimer = null;
         let dashboardActionInFlight = false;
+        let dashboardActionSequence = 0;
         const activeAgentOrder = new Map();
         let idleLogoutTimer = null;
         let lastActivityResetAt = 0;
@@ -567,6 +568,44 @@
                 input.value = "";
             });
             activeSearchInput = searchInputs[0] || null;
+        }
+
+        function currentDriveValue() {
+            return driveSelect ? driveSelect.value : "";
+        }
+
+        function appendDashboardSelectionParams(params) {
+            if (selectedAgentId) {
+                params.set("agent_id", selectedAgentId);
+            }
+
+            const selectedDriveValue = currentDriveValue();
+
+            if (selectedDriveValue) {
+                params.set("drive_root", selectedDriveValue);
+            }
+        }
+
+        function payloadSelectedAgentId(data) {
+            if (!data) {
+                return "";
+            }
+
+            if (Object.prototype.hasOwnProperty.call(data, "selected_agent_id")) {
+                return data.selected_agent_id || "";
+            }
+
+            if (data.dashboard && Object.prototype.hasOwnProperty.call(data.dashboard, "selected_agent_id")) {
+                return data.dashboard.selected_agent_id || "";
+            }
+
+            return "";
+        }
+
+        function payloadBelongsToCurrentSelection(data) {
+            const incomingAgentId = payloadSelectedAgentId(data);
+
+            return !selectedAgentId || incomingAgentId === selectedAgentId;
         }
 
         function syncProfileButtonState() {
@@ -892,14 +931,15 @@
             const agents = Array.isArray(data.agents) ? data.agents.slice() : (data.active_agents || []).slice();
             const previousSelectedAgentId = selectedAgentId;
 
-            if (Object.prototype.hasOwnProperty.call(data, "selected_agent_id")) {
-                selectedAgentId = data.selected_agent_id || "";
-            }
+            if (data.selected_agent_removed && previousSelectedAgentId) {
+                selectedAgentId = "";
+                updateActiveAgentSelection();
 
-            if (previousSelectedAgentId && !selectedAgentId) {
                 window.setTimeout(function () {
                     selectAgent("");
                 }, 0);
+            } else if (data.selected_agent_id) {
+                selectedAgentId = data.selected_agent_id || "";
             }
 
             if (activeAgentsOnlineElement) {
@@ -972,6 +1012,11 @@
         }
 
         function applyFilesPayload(data, currentQuery) {
+            if (!payloadBelongsToCurrentSelection(data)) {
+                setRowsBusy(false);
+                return false;
+            }
+
             selectedAgentId = data.selected_agent_id ?? data.dashboard?.selected_agent_id ?? selectedAgentId;
             rowsElement.innerHTML = data.rows_html;
             setRowsBusy(false);
@@ -998,6 +1043,7 @@
             lastRenderedQuery = currentQuery;
             lastRenderedPage = currentPage;
             lastRenderedFilter = activeFilter;
+            return true;
         }
 
         function scheduleFilesOnlyRefresh(delayMs = 90) {
@@ -1026,6 +1072,7 @@
             updateFilterButtons();
             updateActiveAgentSelection();
             dashboardActionInFlight = true;
+            const actionSequence = ++dashboardActionSequence;
 
             const formData = new FormData();
             formData.set("agent_id", selectedAgentId);
@@ -1047,6 +1094,10 @@
                 });
 
                 if (!response.ok) {
+                    if (actionSequence !== dashboardActionSequence) {
+                        return;
+                    }
+
                     selectedAgentId = previousSelectedAgentId;
                     updateActiveAgentSelection();
                     setRowsBusy(false);
@@ -1054,14 +1105,24 @@
                     return;
                 }
 
+                if (actionSequence !== dashboardActionSequence) {
+                    return;
+                }
+
                 applyFilesPayload(await response.json(), "");
             } catch (error) {
+                if (actionSequence !== dashboardActionSequence) {
+                    return;
+                }
+
                 selectedAgentId = previousSelectedAgentId;
                 updateActiveAgentSelection();
                 setRowsBusy(false);
                 console.error("Unable to select DriveAgent user.", error);
             } finally {
-                dashboardActionInFlight = false;
+                if (actionSequence === dashboardActionSequence) {
+                    dashboardActionInFlight = false;
+                }
             }
         }
 
@@ -1079,6 +1140,7 @@
 
             const currentQuery = getSearchQuery();
             const params = new URLSearchParams();
+            appendDashboardSelectionParams(params);
 
             if (filesOnly) {
                 params.set("scope", "files");
@@ -1193,6 +1255,10 @@
             const formData = new FormData(driveSelectForm);
             formData.set(driveSelect.name, selectedDriveValue);
 
+            if (selectedAgentId) {
+                formData.set("agent_id", selectedAgentId);
+            }
+
             if (refreshRequestController) {
                 refreshRequestController.abort();
                 refreshRequestController = null;
@@ -1200,6 +1266,7 @@
 
             driveSelect.disabled = true;
             dashboardActionInFlight = true;
+            const actionSequence = ++dashboardActionSequence;
 
             if (scanStatusTextElement) {
                 scanStatusTextElement.textContent = "Switching Drive";
@@ -1218,11 +1285,19 @@
                 });
 
                 if (!response.ok) {
+                    if (actionSequence !== dashboardActionSequence) {
+                        return;
+                    }
+
                     driveSelectForm.submit();
                     return;
                 }
 
                 const data = await response.json();
+                if (actionSequence !== dashboardActionSequence) {
+                    return;
+                }
+
                 applyFilesPayload(data, "");
 
                 window.setTimeout(function () {
@@ -1233,11 +1308,17 @@
                     refreshFiles({ force: true });
                 }, 1200);
             } catch (error) {
+                if (actionSequence !== dashboardActionSequence) {
+                    return;
+                }
+
                 console.error("Unable to switch drive.", error);
                 driveSelectForm.submit();
             } finally {
-                driveSelect.disabled = false;
-                dashboardActionInFlight = false;
+                if (actionSequence === dashboardActionSequence) {
+                    driveSelect.disabled = false;
+                    dashboardActionInFlight = false;
+                }
             }
         }
 
@@ -1255,9 +1336,22 @@
                 scanStatusTextElement.textContent = "Sync Running";
             }
 
+            const formData = new FormData();
+
+            if (selectedAgentId) {
+                formData.set("agent_id", selectedAgentId);
+            }
+
+            const selectedDriveValue = currentDriveValue();
+
+            if (selectedDriveValue) {
+                formData.set("drive_root", selectedDriveValue);
+            }
+
             try {
                 await fetch(scanUrl, {
                     method: "POST",
+                    body: formData,
                     headers: {
                         "X-CSRFToken": csrfInput ? csrfInput.value : "",
                         "X-Requested-With": "XMLHttpRequest",
@@ -1292,7 +1386,16 @@
             }
 
             try {
-                const response = await fetch(activeAgentsUrl, {
+                const params = new URLSearchParams();
+
+                if (selectedAgentId) {
+                    params.set("agent_id", selectedAgentId);
+                }
+
+                const requestUrl = params.toString()
+                    ? `${activeAgentsUrl}?${params.toString()}`
+                    : activeAgentsUrl;
+                const response = await fetch(requestUrl, {
                     headers: {
                         "X-Requested-With": "XMLHttpRequest",
                     },
