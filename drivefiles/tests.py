@@ -155,7 +155,7 @@ class AuthFlowTests(TestCase):
 
         self.assertContains(response, "Secure Drive Access.")
         self.assertContains(response, "Drive Status")
-        self.assertContains(response, "Remember me")
+        self.assertNotContains(response, "Remember me")
         self.assertContains(response, "bar-one")
         self.assertContains(response, "bar-two")
         self.assertContains(response, "bar-three")
