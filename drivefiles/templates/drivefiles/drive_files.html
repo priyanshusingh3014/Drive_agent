@@ -1296,6 +1296,42 @@
             });
         }
 
+        const clientPayloadCache = new Map();
+        const MAX_CLIENT_CACHE_ENTRIES = 64;
+
+        function getClientCacheKey(agentId, driveValue, filter, page, searchQuery) {
+            const agentKey = String(agentId || "local").trim();
+            const driveKey = String(driveValue || "").trim();
+            const filterKey = String(filter || "all").trim().toLowerCase();
+            const pageKey = String(page || 1).trim();
+            const searchKey = String(searchQuery || "").trim().toLowerCase();
+            return `${agentKey}:${driveKey}:${filterKey}:${pageKey}:${searchKey}`;
+        }
+
+        function setCachedPayload(agentId, driveValue, filter, page, searchQuery, data) {
+            if (!data || data.unchanged) return;
+            const key = getClientCacheKey(agentId, driveValue, filter, page, searchQuery);
+            clientPayloadCache.set(key, {
+                timestamp: Date.now(),
+                data: data,
+            });
+            if (clientPayloadCache.size > MAX_CLIENT_CACHE_ENTRIES) {
+                const oldestKey = clientPayloadCache.keys().next().value;
+                clientPayloadCache.delete(oldestKey);
+            }
+        }
+
+        function getCachedPayload(agentId, driveValue, filter, page, searchQuery) {
+            const key = getClientCacheKey(agentId, driveValue, filter, page, searchQuery);
+            const entry = clientPayloadCache.get(key);
+            if (!entry) return null;
+            if (Date.now() - entry.timestamp > 30000) {
+                clientPayloadCache.delete(key);
+                return null;
+            }
+            return entry.data;
+        }
+
         function applyFilesPayload(data, currentQuery, options = {}) {
             if (!payloadBelongsToCurrentSelection(data)) {
                 setRowsBusy(false);
@@ -1304,6 +1340,17 @@
 
             const preserveRows = Boolean(options.preserveRows);
             selectedAgentId = data.selected_agent_id ?? data.dashboard?.selected_agent_id ?? selectedAgentId;
+
+            if (!data.unchanged && data.rows_html) {
+                setCachedPayload(
+                    selectedAgentId,
+                    data.selected_drive_value || currentDriveValue(),
+                    activeFilter,
+                    currentPage,
+                    currentQuery,
+                    data
+                );
+            }
 
             if (!preserveRows) {
                 rowsElement.innerHTML = data.rows_html;
@@ -1380,17 +1427,24 @@
             selectedAgentId = agentId || "";
             updateFilterButtons();
             updateActiveAgentSelection();
+
+            // INSTANT UI RESPONSE: Serve cached payload immediately for 0ms latency
+            const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, currentPage, getSearchQuery());
+            if (cachedPayload) {
+                applyFilesPayload(cachedPayload, "");
+            } else {
+                setRowsBusy(true);
+            }
+
             dashboardActionInFlight = true;
             const actionSequence = ++dashboardActionSequence;
 
             const formData = new FormData();
             formData.set("agent_id", selectedAgentId);
 
-            if (scanStatusTextElement) {
+            if (scanStatusTextElement && !cachedPayload) {
                 scanStatusTextElement.textContent = selectedAgentId ? "Loading User" : "Loading Dashboard";
             }
-
-            setRowsBusy(true);
 
             try {
                 const response = await fetch(selectAgentUrl, {
@@ -1407,9 +1461,11 @@
                         return;
                     }
 
-                    selectedAgentId = previousSelectedAgentId;
-                    updateActiveAgentSelection();
-                    setRowsBusy(false);
+                    if (!cachedPayload) {
+                        selectedAgentId = previousSelectedAgentId;
+                        updateActiveAgentSelection();
+                        setRowsBusy(false);
+                    }
                     refreshActiveAgents();
                     return;
                 }
@@ -1418,15 +1474,18 @@
                     return;
                 }
 
-                applyFilesPayload(await response.json(), "");
+                const data = await response.json();
+                applyFilesPayload(data, "");
             } catch (error) {
                 if (actionSequence !== dashboardActionSequence) {
                     return;
                 }
 
-                selectedAgentId = previousSelectedAgentId;
-                updateActiveAgentSelection();
-                setRowsBusy(false);
+                if (!cachedPayload) {
+                    selectedAgentId = previousSelectedAgentId;
+                    updateActiveAgentSelection();
+                    setRowsBusy(false);
+                }
                 console.error("Unable to select DriveAgent user.", error);
             } finally {
                 if (actionSequence === dashboardActionSequence) {
@@ -1588,15 +1647,20 @@
                 refreshRequestController = null;
             }
 
-            driveSelect.disabled = true;
+            // INSTANT UI RESPONSE: Try cached payload for instant drive switch!
+            const cachedPayload = getCachedPayload(selectedAgentId, selectedDriveValue, activeFilter, currentPage, getSearchQuery());
+            if (cachedPayload) {
+                applyFilesPayload(cachedPayload, "");
+            } else {
+                setRowsBusy(true);
+            }
+
             dashboardActionInFlight = true;
             const actionSequence = ++dashboardActionSequence;
 
-            if (scanStatusTextElement) {
+            if (scanStatusTextElement && !cachedPayload) {
                 scanStatusTextElement.textContent = "Switching Drive";
             }
-
-            setRowsBusy(true);
 
             try {
                 const response = await fetch(driveSelectForm.action, {
@@ -1613,7 +1677,9 @@
                         return;
                     }
 
-                    driveSelectForm.submit();
+                    if (!cachedPayload) {
+                        driveSelectForm.submit();
+                    }
                     return;
                 }
 
@@ -1623,21 +1689,15 @@
                 }
 
                 applyFilesPayload(data, "");
-
-                window.setTimeout(function () {
-                    refreshFiles({ force: true });
-                }, 300);
-
-                window.setTimeout(function () {
-                    refreshFiles({ force: true });
-                }, 1200);
             } catch (error) {
                 if (actionSequence !== dashboardActionSequence) {
                     return;
                 }
 
                 console.error("Unable to switch drive.", error);
-                driveSelectForm.submit();
+                if (!cachedPayload) {
+                    driveSelectForm.submit();
+                }
             } finally {
                 if (actionSequence === dashboardActionSequence) {
                     driveSelect.disabled = false;
@@ -1684,12 +1744,6 @@
 
                 currentPage = 1;
                 await refreshFiles({ force: true });
-                window.setTimeout(function () {
-                    refreshFiles({ force: true });
-                }, 300);
-                window.setTimeout(function () {
-                    refreshFiles({ force: true });
-                }, 1200);
             } catch (error) {
                 console.error("Unable to request scan.", error);
             } finally {
@@ -1768,8 +1822,17 @@
                 activeSearchInput = input;
                 resetFileListingForSearch();
                 cancelRefreshRequest();
-                setRowsBusy(true);
-                scheduleFilesOnlyRefresh(60);
+                const query = getSearchQuery();
+
+                // Check instant cache if query exists
+                const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, 1, query);
+                if (cachedPayload) {
+                    applyFilesPayload(cachedPayload, query);
+                } else {
+                    setRowsBusy(true);
+                }
+
+                scheduleFilesOnlyRefresh(120);
             });
         });
 
@@ -1867,6 +1930,13 @@
                 }
 
                 resetIdleLogoutTimer();
+
+                // INSTANT UI RESPONSE: Check cache for instant pagination!
+                const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, currentPage, getSearchQuery());
+                if (cachedPayload) {
+                    applyFilesPayload(cachedPayload, getSearchQuery());
+                }
+
                 refreshFiles({
                     filesOnly: true,
                     force: true,
@@ -1894,6 +1964,13 @@
                 closeMenus();
                 resetIdleLogoutTimer();
                 updateFilterButtons();
+
+                // INSTANT UI RESPONSE: Serve cached payload immediately for filter!
+                const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, currentPage, getSearchQuery());
+                if (cachedPayload) {
+                    applyFilesPayload(cachedPayload, getSearchQuery());
+                }
+
                 refreshFiles({
                     filesOnly: true,
                     force: true,
