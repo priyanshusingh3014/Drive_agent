@@ -1300,21 +1300,27 @@ def _remote_search_q(search_query):
 
 
 def _extension_query(extensions):
-    query = Q()
+    if not extensions:
+        return Q()
 
-    for extension in extensions:
-        query |= Q(extension__iexact=extension)
+    normalized_exts = tuple(str(ext or "").strip().lower() for ext in extensions if ext)
 
-    return query
+    if not normalized_exts:
+        return Q()
+
+    return Q(extension__in=normalized_exts)
 
 
 def _type_class_query(type_classes):
-    query = Q()
+    if not type_classes:
+        return Q()
 
-    for type_class in type_classes:
-        query |= Q(type_class__iexact=type_class)
+    normalized_classes = tuple(str(tc or "").strip().lower() for tc in type_classes if tc)
 
-    return query
+    if not normalized_classes:
+        return Q()
+
+    return Q(type_class__in=normalized_classes)
 
 
 def _remote_type_q(filter_type):
@@ -1332,14 +1338,16 @@ def _remote_type_q(filter_type):
         "videos": ("video",),
     }
 
+    all_known_type_classes = ("archive", "document", "pdf", "image", "spreadsheet", "video")
+    all_known_extensions = tuple(
+        ext.lower()
+        for group in FILE_TYPE_GROUPS
+        for ext in group["extensions"]
+        if ext
+    )
+
     if filter_type == "others":
-        known_type_q = Q()
-
-        for category_key in FILE_TYPE_GROUP_BY_KEY:
-            if category_key not in {"all", "others"}:
-                known_type_q |= _remote_type_q(category_key)
-
-        return ~known_type_q
+        return ~Q(type_class__in=all_known_type_classes) & ~Q(extension__in=all_known_extensions)
 
     group = FILE_TYPE_GROUP_BY_KEY[filter_type]
     query = _type_class_query(category_classes.get(filter_type, ()))
@@ -1864,10 +1872,35 @@ def _build_agent_files_context(
         if selected_drive
         else ActiveAgentFile.objects.none()
     )
-    if selected_drive and not search_query and filter_type == "all":
-        filtered_count = indexed_files
+    last_scan_source = (
+        selected_drive.last_reported_at
+        if selected_drive
+        else selected_agent.last_seen_at
+    )
+    active_agents_payload = _active_agents_json_payload(selected_agent.agent_id)
+    type_distribution = _build_remote_file_type_distribution(
+        selected_drive,
+        cache_key=(
+            "agent-db",
+            selected_agent.agent_id,
+            selected_drive.value if selected_drive else "",
+            _timestamp_version(last_scan_source),
+            indexed_files,
+        ),
+    )
+
+    if selected_drive and not search_query:
+        if filter_type == "all":
+            filtered_count = indexed_files
+        else:
+            matching_item = next(
+                (item for item in type_distribution["items"] if item["key"] == filter_type),
+                None,
+            )
+            filtered_count = matching_item["count"] if matching_item else 0
     else:
         filtered_count = filtered_queryset.count()
+
     pagination = _build_pagination_context(filtered_count, page_number)
     page_start_index = (pagination["page_number"] - 1) * TABLE_PAGE_SIZE
     paged_files = [
@@ -1890,22 +1923,6 @@ def _build_agent_files_context(
             "modified_display",
         )[page_start_index:pagination["page_end"]]
     ]
-    last_scan_source = (
-        selected_drive.last_reported_at
-        if selected_drive
-        else selected_agent.last_seen_at
-    )
-    active_agents_payload = _active_agents_json_payload(selected_agent.agent_id)
-    type_distribution = _build_remote_file_type_distribution(
-        selected_drive,
-        cache_key=(
-            "agent-db",
-            selected_agent.agent_id,
-            selected_drive.value if selected_drive else "",
-            _timestamp_version(last_scan_source),
-            indexed_files,
-        ),
-    )
     dashboard_summary = _build_agent_dashboard_summary_from_counts(
         selected_agent,
         selected_drive,
@@ -1972,9 +1989,31 @@ def _build_agent_files_only_context(
         else ActiveAgentFile.objects.none()
     )
     indexed_files = selected_drive.indexed_files if selected_drive else 0
+    last_scan_source = (
+        selected_drive.last_reported_at
+        if selected_drive
+        else selected_agent.last_seen_at
+    )
 
-    if selected_drive and not search_query and filter_type == "all":
-        filtered_count = indexed_files
+    if selected_drive and not search_query:
+        if filter_type == "all":
+            filtered_count = indexed_files
+        else:
+            type_distribution = _build_remote_file_type_distribution(
+                selected_drive,
+                cache_key=(
+                    "agent-db",
+                    selected_agent.agent_id,
+                    selected_drive.value if selected_drive else "",
+                    _timestamp_version(last_scan_source),
+                    indexed_files,
+                ),
+            )
+            matching_item = next(
+                (item for item in type_distribution["items"] if item["key"] == filter_type),
+                None,
+            )
+            filtered_count = matching_item["count"] if matching_item else 0
     else:
         filtered_count = filtered_queryset.count()
 
