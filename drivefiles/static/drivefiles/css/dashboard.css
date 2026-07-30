@@ -1771,3 +1771,42 @@
         ) {
             font-weight: 500 !important;
         }
+
+        /* 2000 Files/Sec & Fast Click Optimizations */
+        [data-file-scroll] {
+            will-change: scroll-position;
+            transform: translateZ(0);
+            contain: layout style paint;
+        }
+
+        tr.file-row,
+        .file-row,
+        [data-file-rows] tr {
+            content-visibility: auto;
+            contain-intrinsic-size: 44px;
+        }
+
+        button,
+        input,
+        select,
+        a,
+        .sidebar-user-button,
+        .page-button,
+        .filter-button,
+        .brand,
+        [data-filter-value] {
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            transition: transform 0.05s ease, opacity 0.05s ease;
+        }
+
+        button:active,
+        .sidebar-user-button:active,
+        .page-button:active,
+        .filter-button:active,
+        .brand:active,
+        [data-filter-value]:active {
+            transform: scale(0.97);
+            opacity: 0.85;
+        }
+

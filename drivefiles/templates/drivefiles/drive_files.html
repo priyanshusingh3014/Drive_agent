@@ -473,7 +473,7 @@
         const refreshIntervalMs = {{ refresh_interval_ms }};
         const activeAgentsRefreshIntervalMs = {{ active_agents_refresh_interval_ms }};
         const idleLogoutMs = 60 * 1000;
-        const scrollBatchSize = 1000;
+        const scrollBatchSize = 5000;
         const dataUrl = "{% url 'drive_files_data' %}";
         const activeAgentsUrl = "{% url 'active_agents_data' %}";
         const selectAgentUrl = "{% url 'select_agent' %}";
@@ -946,7 +946,8 @@
                 - tableScrollElement.scrollTop
                 - tableScrollElement.clientHeight;
 
-            return remainingDistance < Math.max(700, tableScrollElement.clientHeight * 1.8);
+            // Proactively load another 5000 files in advance when user gets within 12 screen heights or 10000px of bottom
+            return remainingDistance < Math.max(10000, tableScrollElement.clientHeight * 12);
         }
 
         function fileScrollNeedsRows() {
@@ -998,10 +999,15 @@
             lastRenderedVersion = data.version;
             lastRenderedQuery = currentQuery;
             lastRenderedFilter = activeFilter;
+
+            if (scrollHasMore && fileScrollNearBottom()) {
+                scheduleScrollPrefetch(0);
+            }
+
             return true;
         }
 
-        function scheduleScrollPrefetch(delayMs = 120) {
+        function scheduleScrollPrefetch(delayMs = 0) {
             window.clearTimeout(scrollPrefetchTimer);
 
             if (!scrollHasMore || scrollPageInFlight || dashboardActionInFlight) {
@@ -1095,15 +1101,15 @@
 
                 window.setTimeout(function () {
                     if (fileScrollNeedsRows() || fileScrollNearBottom()) {
-                        loadNextScrollPage();
+                        loadNextScrollPage({ prefetch: true });
                     }
                 }, 0);
             }
         }
 
         function loadNextPageIfScrollNeedsRows() {
-            if (fileScrollNeedsRows()) {
-                loadNextScrollPage();
+            if (fileScrollNeedsRows() || fileScrollNearBottom()) {
+                loadNextScrollPage({ prefetch: true });
             }
         }
 
@@ -1118,7 +1124,7 @@
                 scrollFramePending = false;
 
                 if (fileScrollNearBottom()) {
-                    loadNextScrollPage();
+                    loadNextScrollPage({ prefetch: true });
                 }
             });
         }
