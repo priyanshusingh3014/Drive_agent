@@ -473,7 +473,7 @@
         const refreshIntervalMs = {{ refresh_interval_ms }};
         const activeAgentsRefreshIntervalMs = {{ active_agents_refresh_interval_ms }};
         const idleLogoutMs = 60 * 1000;
-        const scrollBatchSize = 5000;
+        const scrollBatchSize = 10000;
         const dataUrl = "{% url 'drive_files_data' %}";
         const activeAgentsUrl = "{% url 'active_agents_data' %}";
         const selectAgentUrl = "{% url 'select_agent' %}";
@@ -991,8 +991,8 @@
                 - tableScrollElement.scrollTop
                 - tableScrollElement.clientHeight;
 
-            // Proactively load another 5000 files in advance when user gets within 12 screen heights or 10000px of bottom
-            return remainingDistance < Math.max(10000, tableScrollElement.clientHeight * 12);
+            // Proactively load another 10000 files in advance when user gets within 16 screen heights or 15000px of bottom
+            return remainingDistance < Math.max(15000, tableScrollElement.clientHeight * 16);
         }
 
         function fileScrollNeedsRows() {
