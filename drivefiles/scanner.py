@@ -1,6 +1,7 @@
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -306,40 +307,19 @@ def _publish_partial_scan(drive_root, drive_generation, files, errors):
     return True
 
 
-def _collect_files(
-    drive_root,
-    drive_label,
-    known_paths,
-    scan_has_completed,
-    drive_generation,
-):
+def _scan_dir_tree(dir_path, drive_root, known_paths, scan_has_completed, scan_started_timestamp, drive_generation):
     files = []
-    errors = []
     current_paths = set()
-    scan_started_timestamp = time.time()
-
-    if not drive_root.exists():
-        return {
-            "files": (),
-            "content_signature": (),
-            "error_message": f"{drive_label} was not found.",
-            "indexed_paths": current_paths,
-        }
-
-    stack = [str(drive_root)]
+    errors = []
+    stack = [dir_path]
 
     while stack:
         if not _is_current_drive_generation(drive_generation):
-            return {
-                "files": (),
-                "error_message": None,
-                "indexed_paths": current_paths,
-                "aborted": True,
-            }
+            return files, current_paths, errors, True
 
-        dir_path = stack.pop()
+        current_dir = stack.pop()
         try:
-            with os.scandir(dir_path) as entries:
+            with os.scandir(current_dir) as entries:
                 subdirs = []
                 for entry in entries:
                     try:
@@ -358,7 +338,10 @@ def _collect_files(
                             subdirs.append(entry.path)
                         elif entry.is_file(follow_symlinks=False):
                             full_path = Path(entry.path)
-                            relative_path = full_path.relative_to(drive_root)
+                            try:
+                                relative_path = full_path.relative_to(drive_root)
+                            except ValueError:
+                                relative_path = full_path.name
                             extension = full_path.suffix or "No extension"
                             type_metadata = _get_file_type_metadata(extension)
                             path_key = os.path.normcase(str(full_path))
@@ -394,20 +377,124 @@ def _collect_files(
                             )
                     except (PermissionError, FileNotFoundError, OSError):
                         continue
-
                 subdirs.sort(key=lambda p: _folder_scan_key(os.path.basename(p)), reverse=True)
                 stack.extend(subdirs)
         except (PermissionError, FileNotFoundError, OSError) as err:
             errors.append(str(err))
             continue
 
-    sorted_files = _sort_files_by_freshness(files)
+    return files, current_paths, errors, False
+
+
+def _collect_files(
+    drive_root,
+    drive_label,
+    known_paths,
+    scan_has_completed,
+    drive_generation,
+):
+    all_files = []
+    all_paths = set()
+    all_errors = []
+    scan_started_timestamp = time.time()
+
+    if not drive_root.exists():
+        return {
+            "files": (),
+            "content_signature": (),
+            "error_message": f"{drive_label} was not found.",
+            "indexed_paths": all_paths,
+        }
+
+    top_dirs = []
+    try:
+        with os.scandir(str(drive_root)) as entries:
+            for entry in entries:
+                try:
+                    name = entry.name
+                    if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES:
+                        continue
+                    stat_res = entry.stat(follow_symlinks=False)
+                    file_attrs = getattr(stat_res, "st_file_attributes", 0)
+                    if file_attrs & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
+                        continue
+
+                    if entry.is_dir(follow_symlinks=False):
+                        top_dirs.append(entry.path)
+                    elif entry.is_file(follow_symlinks=False):
+                        full_path = Path(entry.path)
+                        relative_path = full_path.relative_to(drive_root)
+                        extension = full_path.suffix or "No extension"
+                        type_metadata = _get_file_type_metadata(extension)
+                        path_key = os.path.normcase(str(full_path))
+                        all_paths.add(path_key)
+                        freshness_timestamp = max(stat_res.st_ctime, stat_res.st_mtime)
+                        if scan_has_completed and path_key not in known_paths:
+                            freshness_timestamp = scan_started_timestamp
+
+                        all_files.append(
+                            {
+                                "name": name,
+                                "path_key": path_key,
+                                "full_path": str(full_path),
+                                "relative_path": str(relative_path),
+                                "folder": str(full_path.parent),
+                                "size": format_size(stat_res.st_size),
+                                "size_bytes": stat_res.st_size,
+                                "extension": extension,
+                                "type_badge": type_metadata["badge"],
+                                "type_class": type_metadata["class"],
+                                "type_label": type_metadata["label"],
+                                "modified": datetime.fromtimestamp(
+                                    stat_res.st_mtime
+                                ).strftime("%d-%m-%Y %I:%M %p"),
+                                "modified_timestamp": stat_res.st_mtime,
+                                "freshness_timestamp": freshness_timestamp,
+                            }
+                        )
+                except (PermissionError, FileNotFoundError, OSError):
+                    continue
+    except (PermissionError, FileNotFoundError, OSError) as err:
+        all_errors.append(str(err))
+
+    if top_dirs:
+        max_workers = min(16, (os.cpu_count() or 4) * 2)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(
+                    _scan_dir_tree,
+                    d,
+                    drive_root,
+                    known_paths,
+                    scan_has_completed,
+                    scan_started_timestamp,
+                    drive_generation,
+                )
+                for d in top_dirs
+            ]
+            for future in as_completed(futures):
+                try:
+                    f_files, f_paths, f_errors, aborted = future.result()
+                    if aborted:
+                        return {
+                            "files": (),
+                            "error_message": None,
+                            "indexed_paths": all_paths,
+                            "aborted": True,
+                        }
+                    all_files.extend(f_files)
+                    all_paths.update(f_paths)
+                    all_errors.extend(f_errors)
+                except Exception as err:
+                    all_errors.append(str(err))
+
+    sorted_files = _sort_files_by_freshness(all_files)
 
     return {
         "files": sorted_files,
         "content_signature": _build_content_signature(sorted_files),
-        "error_message": errors[0] if errors and not files else None,
-        "indexed_paths": current_paths,
+        "error_message": all_errors[0] if all_errors and not all_files else None,
+        "indexed_paths": all_paths,
         "aborted": False,
     }
 

@@ -920,31 +920,24 @@
             if (!tableScrollElement || !rowsElement || !pageSummaryElement) {
                 return;
             }
-            const rows = rowsElement.querySelectorAll("tr");
-            const totalRowsCount = rows.length;
-            if (!totalRowsCount) {
+            const totalRows = rowsElement.childElementCount;
+            if (!totalRows) {
                 return;
             }
 
-            const containerRect = tableScrollElement.getBoundingClientRect();
-            let firstVisibleIndex = 0;
-            let lastVisibleIndex = 0;
+            const firstRow = rowsElement.firstElementChild;
+            const rowHeight = (firstRow && firstRow.offsetHeight) ? firstRow.offsetHeight : 44;
+            const scrollTop = tableScrollElement.scrollTop;
+            const clientHeight = tableScrollElement.clientHeight;
 
-            for (let i = 0; i < totalRowsCount; i++) {
-                const rect = rows[i].getBoundingClientRect();
-                if (rect.bottom > containerRect.top + 10 && rect.top < containerRect.bottom - 10) {
-                    if (firstVisibleIndex === 0) {
-                        firstVisibleIndex = i + 1;
-                    }
-                    lastVisibleIndex = i + 1;
-                }
-            }
+            const firstVisibleIndex = Math.max(1, Math.floor(scrollTop / rowHeight) + 1);
+            const lastVisibleIndex = Math.min(totalRows, Math.ceil((scrollTop + clientHeight) / rowHeight));
 
             if (firstVisibleIndex > 0 && lastVisibleIndex >= firstVisibleIndex) {
                 const topDisplay = _formatNumber(firstVisibleIndex);
                 const bottomDisplay = _formatNumber(lastVisibleIndex);
-                const totalDisplay = scrollTotalDisplay || _formatNumber(totalRowsCount);
-                const loadedDisplay = scrollLoadedEndDisplay || _formatNumber(totalRowsCount);
+                const totalDisplay = scrollTotalDisplay || _formatNumber(totalRows);
+                const loadedDisplay = scrollLoadedEndDisplay || _formatNumber(totalRows);
                 pageSummaryElement.textContent = `Showing ${topDisplay}–${bottomDisplay} of ${totalDisplay} files (${loadedDisplay} loaded)`;
             }
         }
