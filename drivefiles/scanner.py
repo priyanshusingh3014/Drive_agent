@@ -13,8 +13,8 @@ from .drive_config import (
 
 MAX_DISPLAYED_FILES = None
 FALLBACK_SCAN_INTERVAL_SECONDS = 30
-REALTIME_DEBOUNCE_SECONDS = 1.0
-PARTIAL_SCAN_BATCH_SIZE = 100
+REALTIME_DEBOUNCE_SECONDS = 0.1
+PARTIAL_SCAN_BATCH_SIZE = 5000
 PARTIAL_SCAN_INTERVAL_SECONDS = 0.5
 EXCLUDED_FOLDER_NAMES = {
     "$recycle.bin",
@@ -317,8 +317,6 @@ def _collect_files(
     errors = []
     current_paths = set()
     scan_started_timestamp = time.time()
-    last_partial_publish_at = time.monotonic()
-    files_since_partial_publish = 0
 
     if not drive_root.exists():
         return {
@@ -328,13 +326,9 @@ def _collect_files(
             "indexed_paths": current_paths,
         }
 
-    def handle_walk_error(error):
-        errors.append(str(error))
+    stack = [str(drive_root)]
 
-    for folder_path, subfolders, filenames in os.walk(
-        drive_root,
-        onerror=handle_walk_error,
-    ):
+    while stack:
         if not _is_current_drive_generation(drive_generation):
             return {
                 "files": (),
@@ -343,97 +337,69 @@ def _collect_files(
                 "aborted": True,
             }
 
-        subfolders[:] = sorted(
-            [
-                subfolder
-                for subfolder in subfolders
-                if subfolder.lower() not in EXCLUDED_FOLDER_NAMES
-                and _visible_path_stat(Path(folder_path) / subfolder) is not None
-            ],
-            key=_folder_scan_key,
-        )
+        dir_path = stack.pop()
+        try:
+            with os.scandir(dir_path) as entries:
+                subdirs = []
+                for entry in entries:
+                    try:
+                        name = entry.name
+                        if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES:
+                            continue
 
-        for filename in filenames:
-            if not _is_current_drive_generation(drive_generation):
-                return {
-                    "files": (),
-                    "error_message": None,
-                    "indexed_paths": current_paths,
-                    "aborted": True,
-                }
+                        is_dir = entry.is_dir(follow_symlinks=False)
+                        stat_res = entry.stat(follow_symlinks=False)
+                        file_attrs = getattr(stat_res, "st_file_attributes", 0)
 
-            full_path = Path(folder_path) / filename
+                        if file_attrs & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
+                            continue
 
-            try:
-                file_information = _visible_path_stat(full_path)
+                        if is_dir:
+                            subdirs.append(entry.path)
+                        elif entry.is_file(follow_symlinks=False):
+                            full_path = Path(entry.path)
+                            relative_path = full_path.relative_to(drive_root)
+                            extension = full_path.suffix or "No extension"
+                            type_metadata = _get_file_type_metadata(extension)
+                            path_key = os.path.normcase(str(full_path))
+                            current_paths.add(path_key)
 
-                if file_information is None:
-                    continue
+                            freshness_timestamp = max(
+                                stat_res.st_ctime,
+                                stat_res.st_mtime,
+                            )
 
-                relative_path = full_path.relative_to(drive_root)
-                extension = full_path.suffix or "No extension"
-                type_metadata = _get_file_type_metadata(extension)
-                path_key = os.path.normcase(str(full_path))
-                current_paths.add(path_key)
-                freshness_timestamp = max(
-                    file_information.st_ctime,
-                    file_information.st_mtime,
-                )
+                            if scan_has_completed and path_key not in known_paths:
+                                freshness_timestamp = scan_started_timestamp
 
-                if scan_has_completed and path_key not in known_paths:
-                    freshness_timestamp = scan_started_timestamp
+                            files.append(
+                                {
+                                    "name": name,
+                                    "path_key": path_key,
+                                    "full_path": str(full_path),
+                                    "relative_path": str(relative_path),
+                                    "folder": str(full_path.parent),
+                                    "size": format_size(stat_res.st_size),
+                                    "size_bytes": stat_res.st_size,
+                                    "extension": extension,
+                                    "type_badge": type_metadata["badge"],
+                                    "type_class": type_metadata["class"],
+                                    "type_label": type_metadata["label"],
+                                    "modified": datetime.fromtimestamp(
+                                        stat_res.st_mtime
+                                    ).strftime("%d-%m-%Y %I:%M %p"),
+                                    "modified_timestamp": stat_res.st_mtime,
+                                    "freshness_timestamp": freshness_timestamp,
+                                }
+                            )
+                    except (PermissionError, FileNotFoundError, OSError):
+                        continue
 
-                files.append(
-                    {
-                        "name": filename,
-                        "path_key": path_key,
-                        "full_path": str(full_path),
-                        "relative_path": str(relative_path),
-                        "folder": str(full_path.parent),
-                        "size": format_size(file_information.st_size),
-                        "size_bytes": file_information.st_size,
-                        "extension": extension,
-                        "type_badge": type_metadata["badge"],
-                        "type_class": type_metadata["class"],
-                        "type_label": type_metadata["label"],
-                        "modified": datetime.fromtimestamp(
-                            file_information.st_mtime
-                        ).strftime("%d-%m-%Y %I:%M %p"),
-                        "modified_timestamp": file_information.st_mtime,
-                        "freshness_timestamp": freshness_timestamp,
-                    }
-                )
-                files_since_partial_publish += 1
-
-                should_publish_partial = (
-                    not scan_has_completed
-                    and (
-                        len(files) == 1
-                        or files_since_partial_publish >= PARTIAL_SCAN_BATCH_SIZE
-                        or time.monotonic() - last_partial_publish_at
-                        >= PARTIAL_SCAN_INTERVAL_SECONDS
-                    )
-                )
-
-                if should_publish_partial:
-                    if not _publish_partial_scan(
-                        drive_root,
-                        drive_generation,
-                        files,
-                        errors,
-                    ):
-                        return {
-                            "files": (),
-                            "error_message": None,
-                            "indexed_paths": current_paths,
-                            "aborted": True,
-                        }
-
-                    files_since_partial_publish = 0
-                    last_partial_publish_at = time.monotonic()
-
-            except (PermissionError, FileNotFoundError, OSError):
-                continue
+                subdirs.sort(key=lambda p: _folder_scan_key(os.path.basename(p)), reverse=True)
+                stack.extend(subdirs)
+        except (PermissionError, FileNotFoundError, OSError) as err:
+            errors.append(str(err))
+            continue
 
     sorted_files = _sort_files_by_freshness(files)
 
