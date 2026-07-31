@@ -499,6 +499,7 @@
     (function () {
         const refreshIntervalMs = {{ refresh_interval_ms }};
         const activeAgentsRefreshIntervalMs = {{ active_agents_refresh_interval_ms }};
+        const idleLogoutMs = 60 * 1000;
         const scrollBatchSize = 10000;
         const dataUrl = "{% url 'drive_files_data' %}";
         const activeAgentsUrl = "{% url 'active_agents_data' %}";
@@ -675,6 +676,17 @@
             syncProfileButtonState();
         }
 
+        function logoutAfterIdle() {
+            if (logoutForm) {
+                logoutForm.submit();
+            }
+        }
+
+        function resetIdleLogoutTimer() {
+            window.clearTimeout(idleLogoutTimer);
+            idleLogoutTimer = window.setTimeout(logoutAfterIdle, idleLogoutMs);
+        }
+
         function registerUserActivity() {
             const now = Date.now();
 
@@ -683,6 +695,7 @@
             }
 
             lastActivityResetAt = now;
+            resetIdleLogoutTimer();
         }
 
         function applyInitialDynamicStyles() {
@@ -1835,11 +1848,6 @@
                 }
 
                 applyFilesPayload(data, "");
-                if (data.is_scanning || !data.files_count) {
-                    window.setTimeout(function () {
-                        refreshFiles({ force: true });
-                    }, 400);
-                }
             } catch (error) {
                 if (actionSequence !== dashboardActionSequence) {
                     return;
