@@ -136,3 +136,47 @@ class RemoteFileDownload(models.Model):
 
     def __str__(self):
         return f"{self.agent.host_name} {self.relative_path}"
+
+
+class DriveActivityLog(models.Model):
+    TYPE_ADDED = "file_added"
+    TYPE_RENAMED = "file_renamed"
+    TYPE_DELETED = "file_deleted"
+    TYPE_EXTERNAL_COPY = "external_copy"
+    TYPE_CHOICES = (
+        (TYPE_ADDED, "File Added"),
+        (TYPE_RENAMED, "File Renamed"),
+        (TYPE_DELETED, "File Deleted"),
+        (TYPE_EXTERNAL_COPY, "External Copy / Download"),
+    )
+
+    agent = models.ForeignKey(
+        ActiveAgent,
+        on_delete=models.CASCADE,
+        related_name="activity_logs",
+        null=True,
+        blank=True,
+    )
+    drive = models.ForeignKey(
+        ActiveAgentDrive,
+        on_delete=models.CASCADE,
+        related_name="activity_logs",
+        null=True,
+        blank=True,
+    )
+    activity_type = models.CharField(max_length=32, choices=TYPE_CHOICES)
+    file_name = models.CharField(max_length=255)
+    old_name = models.CharField(max_length=255, blank=True)
+    details = models.CharField(max_length=512, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-timestamp",)
+        indexes = (
+            models.Index(fields=("drive", "-timestamp")),
+            models.Index(fields=("agent", "-timestamp")),
+        )
+
+    def __str__(self):
+        return f"[{self.get_activity_type_display()}] {self.file_name}"
+

@@ -462,6 +462,33 @@
                         </div>
                     </article>
 
+                    <article class="card side-card activity-card" aria-label="Recent drive activity">
+                        <div class="activity-card-header">
+                            <div class="activity-card-title">
+                                <h2>⚡ Recent Activity <small style="font-size: 11px; font-weight: 500; color: #64748b;">(Last 48 hrs)</small></h2>
+                            </div>
+                        </div>
+
+                        <div class="activity-feed-list" data-activity-list>
+                            {% for item in recent_activity %}
+                                <div class="activity-item">
+                                    <div class="activity-item-left">
+                                        <span class="activity-badge {{ item.badge_class|default:'activity-badge-info' }}">{{ item.type_label|default:item.title|default:'Change' }}</span>
+                                        <div class="activity-details">
+                                            <span class="activity-file-name" title="{{ item.file_name|default:item.title|default:'File' }}">{{ item.file_name|default:item.title|default:'File' }}</span>
+                                            <span class="activity-meta">{{ item.details|default:item.detail|default:'Activity recorded' }}</span>
+                                        </div>
+                                    </div>
+                                    <span class="activity-time">{{ item.time_display|default:item.time|default:'Just now' }}</span>
+                                </div>
+                            {% empty %}
+                                <div class="activity-empty" data-activity-empty>
+                                    No activity recorded in the last 48 hours on <span data-activity-drive-empty>{{ drive_label }}</span>.
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </article>
+
                 </aside>
             </section>
         </main>
@@ -815,6 +842,49 @@
                     systemArchitectureElement.textContent = dashboard.system_info.architecture || "Unknown architecture";
                 }
             }
+
+            if (Array.isArray(dashboard.recent_activity)) {
+                renderRecentActivities(dashboard.recent_activity, dashboard.drive_label);
+            }
+        }
+
+        function renderRecentActivities(activities, driveLabel) {
+            const listEl = document.querySelector("[data-activity-list]");
+
+            if (!listEl) {
+                return;
+            }
+
+            if (!activities || !activities.length) {
+                listEl.innerHTML = `
+                    <div class="activity-empty" data-activity-empty>
+                        No recent file activity recorded on <span>${escapeHtml(driveLabel || "Drive")}</span> yet.
+                    </div>
+                `;
+                return;
+            }
+
+            listEl.innerHTML = activities.map(function (item) {
+                const badgeClass = item.badge_class || (item.tone ? `activity-badge-${item.tone}` : "activity-badge-info");
+                const typeLabel = item.type_label || item.title || "Change";
+                const fileName = item.file_name || item.title || "File";
+                const details = item.details || item.detail || "Activity recorded";
+                const timeDisplay = item.time_display || item.time || "Just now";
+                const timeAbsolute = item.time_absolute || "";
+
+                return `
+                    <div class="activity-item">
+                        <div class="activity-item-left">
+                            <span class="activity-badge ${escapeHtml(badgeClass)}">${escapeHtml(typeLabel)}</span>
+                            <div class="activity-details">
+                                <span class="activity-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>
+                                <span class="activity-meta">${escapeHtml(details)}</span>
+                            </div>
+                        </div>
+                        <span class="activity-time" title="${escapeHtml(timeAbsolute)}">${escapeHtml(timeDisplay)}</span>
+                    </div>
+                `;
+            }).join("");
         }
 
         function renderPagination(pagination) {

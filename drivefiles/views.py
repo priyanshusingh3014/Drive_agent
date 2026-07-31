@@ -35,7 +35,13 @@ from .drive_config import (
     normalize_drive_root,
 )
 from .forms import AgentSignupForm
-from .models import ActiveAgent, ActiveAgentDrive, ActiveAgentFile, RemoteFileDownload
+from .models import (
+    ActiveAgent,
+    ActiveAgentDrive,
+    ActiveAgentFile,
+    DriveActivityLog,
+    RemoteFileDownload,
+)
 from .scanner import (
     format_size,
     get_file_snapshot,
@@ -432,6 +438,130 @@ def _active_agent_cutoff():
     return timezone.now() - timedelta(
         seconds=getattr(settings, "AGENT_ONLINE_SECONDS", 120)
     )
+
+
+def _get_or_create_local_agent_and_drive(drive_root=None):
+    try:
+        host_name = platform.node() or "Local Machine"
+        agent_id = f"local-{host_name.lower().replace(' ', '-')}"
+        agent, _ = ActiveAgent.objects.get_or_create(
+            agent_id=agent_id,
+            defaults={
+                "host_name": host_name,
+                "os_label": f"{platform.system()} {platform.release()}",
+                "architecture": platform.machine(),
+                "ip_address": "127.0.0.1",
+            },
+        )
+        norm_root = normalize_drive_root(drive_root or DRIVE_ROOT)
+        drive_value = drive_root_to_value(norm_root)
+        drive_label = format_drive_label(norm_root)
+        drive_report, _ = ActiveAgentDrive.objects.get_or_create(
+            agent=agent,
+            value=drive_value,
+            defaults={
+                "label": drive_label,
+            },
+        )
+        return agent, drive_report
+    except Exception:
+        return None, None
+
+
+def _log_drive_activity(agent, drive, activity_type, file_name, old_name="", details=""):
+    if not file_name:
+        return None
+
+    if not agent or not drive:
+        local_agent, local_drive = _get_or_create_local_agent_and_drive()
+        agent = agent or local_agent
+        drive = drive or local_drive
+
+    try:
+        return DriveActivityLog.objects.create(
+            agent=agent,
+            drive=drive,
+            activity_type=activity_type,
+            file_name=file_name[:255],
+            old_name=old_name[:255],
+            details=details[:512],
+        )
+    except Exception:
+        return None
+
+
+def log_local_scan_activities(added_files, renamed_files, deleted_files, drive_root=None):
+    agent, drive = _get_or_create_local_agent_and_drive(drive_root)
+
+    for item in renamed_files:
+        _log_drive_activity(
+            agent,
+            drive,
+            DriveActivityLog.TYPE_RENAMED,
+            item["file_name"],
+            old_name=item["old_name"],
+            details=f"Renamed from {item['old_name']} in {item.get('folder', 'Root')}",
+        )
+
+    for item in deleted_files:
+        _log_drive_activity(
+            agent,
+            drive,
+            DriveActivityLog.TYPE_DELETED,
+            item["file_name"],
+            details=f"File deleted from {item.get('folder', 'Root')}",
+        )
+
+    for item in added_files:
+        _log_drive_activity(
+            agent,
+            drive,
+            DriveActivityLog.TYPE_ADDED,
+            item["file_name"],
+            details=f"File added in {item.get('folder', 'Root')}",
+        )
+
+
+def _build_recent_activities(drive_report=None, agent=None, limit=100, hours=48):
+    cutoff_time = timezone.now() - timedelta(hours=hours)
+    queryset = DriveActivityLog.objects.filter(timestamp__gte=cutoff_time).order_by('-timestamp')
+
+    if drive_report:
+        queryset = queryset.filter(drive=drive_report)
+    elif agent:
+        queryset = queryset.filter(agent=agent)
+
+    logs = list(queryset.select_related("drive")[:limit])
+    badge_map = {
+        DriveActivityLog.TYPE_ADDED: ("added", "🟢 File Added", "activity-badge-added"),
+        DriveActivityLog.TYPE_RENAMED: ("renamed", "✏️ File Renamed", "activity-badge-renamed"),
+        DriveActivityLog.TYPE_DELETED: ("deleted", "🔴 File Deleted", "activity-badge-deleted"),
+        DriveActivityLog.TYPE_EXTERNAL_COPY: ("copy", "💾 External Copy", "activity-badge-copy"),
+    }
+
+    activities = []
+    for log in logs:
+        key, label, badge_class = badge_map.get(
+            log.activity_type,
+            ("other", "ℹ️ Change", "activity-badge-info"),
+        )
+        activities.append(
+            {
+                "id": log.id,
+                "type_key": key,
+                "type_label": label,
+                "badge_class": badge_class,
+                "file_name": log.file_name,
+                "old_name": log.old_name,
+                "details": log.details or f"Activity in {log.drive.label if log.drive else 'Drive'}",
+                "time_display": _format_relative_time(log.timestamp),
+                "time_absolute": log.timestamp.strftime("%b %d, %Y %H:%M"),
+                "drive_label": log.drive.label if log.drive else "",
+            }
+        )
+
+    return activities
+
 
 
 def _agent_is_online(agent, online_cutoff=None):
@@ -1227,12 +1357,7 @@ def _build_dashboard_summary(all_snapshot, current_snapshot, drive_root):
         "storage_info": _get_storage_info(drive_root),
         "distribution_items": type_distribution["items"],
         "distribution_gradient": type_distribution["gradient"],
-        "recent_activity": _build_recent_activity(
-            all_snapshot,
-            system_info,
-            total_files,
-            selected_drive_context["drive_label"],
-        ),
+        "recent_activity": _build_recent_activities(),
     }
 
 
@@ -1571,7 +1696,7 @@ def _build_agent_dashboard_summary_from_counts(
         "storage_info": storage_info,
         "distribution_items": type_distribution["items"],
         "distribution_gradient": type_distribution["gradient"],
-        "recent_activity": [],
+        "recent_activity": _build_recent_activities(drive_report, agent),
     }
 
 
@@ -2080,6 +2205,7 @@ def _build_agent_files_only_context(
             else "Remote Sync Running"
         ),
         "version": _agent_drive_version(selected_agent, selected_drive),
+        "recent_activity": _build_recent_activities(drive_report=selected_drive, agent=selected_agent),
     }
 
 
@@ -2819,7 +2945,50 @@ def agent_file_events(request):
     relative_paths = list(normalized_files_by_path.keys())
     deleted_paths = _normalize_deleted_relative_paths(payload.get("deleted_paths"))
 
+    existing_paths = set(
+        ActiveAgentFile.objects.filter(
+            drive=drive_report,
+            relative_path__in=relative_paths,
+        ).values_list("relative_path", flat=True)
+    )
+
+    matched_deletions = set()
+    matched_upserts = set()
+
+    if deleted_paths and normalized_files:
+        for del_path in deleted_paths:
+            del_name = del_path.replace("\\", "/").rsplit("/", 1)[-1]
+            del_dir = del_path.replace("\\", "/").rsplit("/", 1)[0] if "/" in del_path.replace("\\", "/") else ""
+            for norm_file in normalized_files:
+                rel_p = norm_file["relative_path"]
+                if rel_p in matched_upserts:
+                    continue
+                norm_name = norm_file["name"]
+                norm_dir = rel_p.replace("\\", "/").rsplit("/", 1)[0] if "/" in rel_p.replace("\\", "/") else ""
+                if del_dir == norm_dir and del_name != norm_name:
+                    _log_drive_activity(
+                        agent,
+                        drive_report,
+                        DriveActivityLog.TYPE_RENAMED,
+                        norm_name,
+                        old_name=del_name,
+                        details=f"Renamed from {del_name} in {norm_file.get('folder') or 'Root'}",
+                    )
+                    matched_deletions.add(del_path)
+                    matched_upserts.add(rel_p)
+                    break
+
     if deleted_paths:
+        unmatched_deleted = [p for p in deleted_paths if p not in matched_deletions]
+        for rel_path in unmatched_deleted[:10]:
+            file_name = rel_path.replace("\\", "/").rsplit("/", 1)[-1]
+            _log_drive_activity(
+                agent,
+                drive_report,
+                DriveActivityLog.TYPE_DELETED,
+                file_name,
+                details=f"File deleted from drive {drive_report.label}",
+            )
         ActiveAgentFile.objects.filter(
             drive=drive_report,
             relative_path__in=deleted_paths,
@@ -2832,6 +3001,33 @@ def agent_file_events(request):
         ).delete()
 
     if normalized_files:
+        for file_information in normalized_files:
+            rel_p = file_information["relative_path"]
+            if rel_p in matched_upserts:
+                continue
+            file_name = file_information["name"]
+            folder = file_information.get("folder") or "Root"
+            old_name = _safe_text(file_information.get("old_name") or file_information.get("old_relative_path") or "", 255).strip()
+            if old_name and ("\\" in old_name or "/" in old_name):
+                old_name = old_name.replace("\\", "/").rsplit("/", 1)[-1]
+
+            if old_name and old_name != file_name:
+                _log_drive_activity(
+                    agent,
+                    drive_report,
+                    DriveActivityLog.TYPE_RENAMED,
+                    file_name,
+                    old_name=old_name,
+                    details=f"Renamed from {old_name} in {folder}",
+                )
+            elif rel_p not in existing_paths and drive_report.count_complete:
+                _log_drive_activity(
+                    agent,
+                    drive_report,
+                    DriveActivityLog.TYPE_ADDED,
+                    file_name,
+                    details=f"File added in {folder}",
+                )
         ActiveAgentFile.objects.bulk_create(
             [
                 ActiveAgentFile(
@@ -3266,6 +3462,14 @@ def download_file(request):
 
         if not file_report:
             raise Http404("Remote file was not found.")
+
+        _log_drive_activity(
+            selected_agent,
+            selected_drive,
+            DriveActivityLog.TYPE_EXTERNAL_COPY,
+            file_report.name,
+            details="Copied to external storage / downloaded",
+        )
 
         ready_download = _ready_remote_download_for_file(
             selected_agent,

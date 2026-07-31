@@ -499,6 +499,73 @@ def _collect_files(
     }
 
 
+_previous_scan_file_map = {}
+
+
+def _process_local_scan_activities(new_files, drive_root):
+    global _previous_scan_file_map
+
+    new_map = {f["path_key"]: f for f in new_files}
+
+    if not _previous_scan_file_map:
+        _previous_scan_file_map = new_map
+        return
+
+    old_keys = set(_previous_scan_file_map.keys())
+    new_keys = set(new_map.keys())
+
+    removed_keys = old_keys - new_keys
+    added_keys = new_keys - old_keys
+
+    renamed_files = []
+    deleted_files = []
+    added_files = []
+
+    matched_removed = set()
+    matched_added = set()
+
+    for rem_k in removed_keys:
+        old_f = _previous_scan_file_map[rem_k]
+        for add_k in added_keys:
+            if add_k in matched_added:
+                continue
+            new_f = new_map[add_k]
+            if old_f.get("folder") == new_f.get("folder") and old_f.get("size_bytes") == new_f.get("size_bytes"):
+                renamed_files.append({
+                    "file_name": new_f["name"],
+                    "old_name": old_f["name"],
+                    "folder": new_f.get("folder") or "Root",
+                })
+                matched_removed.add(rem_k)
+                matched_added.add(add_k)
+                break
+
+    for rem_k in removed_keys - matched_removed:
+        old_f = _previous_scan_file_map[rem_k]
+        deleted_files.append({
+            "file_name": old_f["name"],
+            "folder": old_f.get("folder") or "Root",
+        })
+
+    for add_k in added_keys - matched_added:
+        new_f = new_map[add_k]
+        added_files.append({
+            "file_name": new_f["name"],
+            "folder": new_f.get("folder") or "Root",
+        })
+
+    _previous_scan_file_map = new_map
+
+    if renamed_files or deleted_files or added_files:
+        try:
+            from django.db import close_old_connections
+            close_old_connections()
+            from .views import log_local_scan_activities
+            log_local_scan_activities(added_files, renamed_files, deleted_files, drive_root)
+        except Exception:
+            pass
+
+
 def scan_drive():
     global _indexed_paths
     global _scan_has_completed
@@ -561,6 +628,7 @@ def scan_drive():
 
         if should_publish_final_snapshot:
             _state.update(snapshot)
+            _process_local_scan_activities(snapshot.get("files", ()), drive_root)
 
         _state.update(
             {
