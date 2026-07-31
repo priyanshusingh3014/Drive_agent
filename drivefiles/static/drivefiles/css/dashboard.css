@@ -1812,7 +1812,7 @@
 
         /* Recent Activity Section (Below Storage Usage D:\) */
         .activity-card {
-            margin-top: 0px;
+            margin-top: 14px;
         }
 
         .activity-card-header {
