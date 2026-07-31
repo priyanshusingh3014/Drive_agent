@@ -1841,19 +1841,31 @@
             flex-direction: column;
             gap: 8px;
             padding: 10px 12px;
-            max-height: 320px;
+            max-height: 380px;
+            min-height: 120px;
             overflow-y: auto;
             scrollbar-gutter: stable;
             scrollbar-width: thin;
+            scrollbar-color: #055ff0 #edf3fb;
         }
 
         .activity-feed-list::-webkit-scrollbar {
-            width: 5px;
+            width: 7px;
+        }
+
+        .activity-feed-list::-webkit-scrollbar-track {
+            background: #edf3fb;
+            border-radius: 999px;
         }
 
         .activity-feed-list::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
+            background: linear-gradient(180deg, #8fb2e8 0%, #055ff0 100%);
             border-radius: 999px;
+            border: 1px solid #edf3fb;
+        }
+
+        .activity-feed-list::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(180deg, #6c9ce4 0%, #044fca 100%);
         }
 
         .activity-item {
