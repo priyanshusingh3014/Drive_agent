@@ -1848,6 +1848,11 @@
                 }
 
                 applyFilesPayload(data, "");
+                if (data.is_scanning || !data.files_count) {
+                    window.setTimeout(function () {
+                        refreshFiles({ force: true });
+                    }, 400);
+                }
             } catch (error) {
                 if (actionSequence !== dashboardActionSequence) {
                     return;
