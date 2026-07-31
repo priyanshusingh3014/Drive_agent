@@ -1,6 +1,7 @@
 import hmac
 import ipaddress
 import json
+import logging
 import math
 import platform
 import shutil
@@ -30,10 +31,13 @@ from .drive_config import (
     build_drive_context,
     drive_sort_key_for_value,
     drive_root_to_value,
+    format_drive_label,
     get_available_drive_roots,
     get_drive_options,
     normalize_drive_root,
 )
+
+logger = logging.getLogger(__name__)
 from .forms import AgentSignupForm
 from .models import (
     ActiveAgent,
@@ -456,15 +460,31 @@ def _get_or_create_local_agent_and_drive(drive_root=None):
         norm_root = normalize_drive_root(drive_root or DRIVE_ROOT)
         drive_value = drive_root_to_value(norm_root)
         drive_label = format_drive_label(norm_root)
-        drive_report, _ = ActiveAgentDrive.objects.get_or_create(
+
+        drive_report = ActiveAgentDrive.objects.filter(
             agent=agent,
-            value=drive_value,
-            defaults={
-                "label": drive_label,
-            },
-        )
+            value__iexact=drive_value,
+        ).first()
+
+        if not drive_report:
+            drive_letter = norm_root.drive[:1] if getattr(norm_root, "drive", None) else ""
+            if drive_letter:
+                drive_report = ActiveAgentDrive.objects.filter(
+                    agent=agent,
+                    value__icontains=drive_letter,
+                ).first()
+
+        if not drive_report:
+            drive_report, _ = ActiveAgentDrive.objects.get_or_create(
+                agent=agent,
+                value=drive_value,
+                defaults={
+                    "label": drive_label,
+                },
+            )
         return agent, drive_report
-    except Exception:
+    except Exception as err:
+        logger.exception("Failed to get or create local agent and drive: %s", err)
         return None, None
 
 
