@@ -2229,6 +2229,10 @@ def _build_drive_files_context(request, selected_drive_root=None, scanner_ready=
     filter_type = request.GET.get("type", "all").strip().lower()
     page_number = _parse_positive_int(request.GET.get("page"), default=1)
     all_snapshot = get_file_snapshot("")
+    if not all_snapshot.get("files"):
+        scan_drive()
+        all_snapshot = get_file_snapshot("")
+
     snapshot = get_file_snapshot(search_query)
     filtered_files, filter_type = _filter_files(snapshot["files"], filter_type)
     pagination = _build_pagination_context(len(filtered_files), page_number)
