@@ -176,7 +176,8 @@ def set_drive_root(drive_root):
         _start_watcher_for_current_drive()
 
     _request_scan()
-    scan_drive()
+    if not cached_drive_state or not cached_drive_state["state"].get("files"):
+        scan_drive()
     return True
 
 
@@ -471,7 +472,7 @@ def _collect_files(
         all_errors.append(str(err))
 
     if top_dirs:
-        max_workers = min(16, (os.cpu_count() or 4) * 2)
+        max_workers = min(32, (os.cpu_count() or 4) * 4)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [
                 executor.submit(
