@@ -225,7 +225,9 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "drive_files"
 LOGOUT_REDIRECT_URL = "login"
 SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
-SESSION_COOKIE_NAME = f"file_agent_session_{secrets.token_hex(8)}"
+SESSION_COOKIE_NAME = "file_agent_session"
+SESSION_COOKIE_AGE = 30 * 24 * 60 * 60
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 AGENT_API_TOKEN = os.environ.get("DRIVE_AGENT_API_TOKEN", "drive-agent-local-token")
 AGENT_ONLINE_SECONDS = max(
     15,
