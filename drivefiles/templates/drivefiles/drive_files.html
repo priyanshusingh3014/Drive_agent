@@ -436,32 +436,6 @@
                         </div>
                     </article>
 
-                    <article class="card side-card" id="settings" aria-label="Storage usage">
-                        <h2>Storage Usage (<span data-drive-label>{{ drive_label }}</span>)</h2>
-
-                        <div class="storage-body">
-                            <div class="storage-track">
-                                <div
-                                    class="storage-fill"
-                                    data-storage-fill
-                                    data-initial-width="{{ storage_info.percent_used }}"
-                                ></div>
-                            </div>
-
-                            <div class="storage-row">
-                                <span>
-                                    <span data-storage-used>{{ storage_info.used_display }}</span> /
-                                    <span data-storage-total>{{ storage_info.total_display }}</span> used
-                                </span>
-                                <strong data-storage-percent>{{ storage_info.percent_used }}%</strong>
-                            </div>
-
-                            <p class="storage-free">
-                                <span data-storage-free>{{ storage_info.free_display }}</span> free
-                            </p>
-                        </div>
-                    </article>
-
                     <article class="card side-card activity-card" aria-label="Recent drive activity">
                         <div class="activity-card-header">
                             <div class="activity-card-title">
@@ -486,6 +460,32 @@
                                     No activity recorded in the last 48 hours on <span data-activity-drive-empty>{{ drive_label }}</span>.
                                 </div>
                             {% endfor %}
+                        </div>
+                    </article>
+
+                    <article class="card side-card" id="settings" aria-label="Storage usage">
+                        <h2>Storage Usage (<span data-drive-label>{{ drive_label }}</span>)</h2>
+
+                        <div class="storage-body">
+                            <div class="storage-track">
+                                <div
+                                    class="storage-fill"
+                                    data-storage-fill
+                                    data-initial-width="{{ storage_info.percent_used }}"
+                                ></div>
+                            </div>
+
+                            <div class="storage-row">
+                                <span>
+                                    <span data-storage-used>{{ storage_info.used_display }}</span> /
+                                    <span data-storage-total>{{ storage_info.total_display }}</span> used
+                                </span>
+                                <strong data-storage-percent>{{ storage_info.percent_used }}%</strong>
+                            </div>
+
+                            <p class="storage-free">
+                                <span data-storage-free>{{ storage_info.free_display }}</span> free
+                            </p>
                         </div>
                     </article>
 
