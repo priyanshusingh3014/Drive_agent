@@ -1837,9 +1837,29 @@
             display: flex;
             flex-direction: column;
             gap: 8px;
-            max-height: 200px;
-            overflow-y: scroll;
-            scrollbar-width: thin;
+            height: 180px;
+            max-height: 180px;
+            overflow-y: auto;
+            scrollbar-gutter: stable;
+            scrollbar-width: auto;
+        }
+
+        .activity-feed-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .activity-feed-list::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        .activity-feed-list::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 4px;
+        }
+
+        .activity-feed-list::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
         }
 
         .activity-item {
