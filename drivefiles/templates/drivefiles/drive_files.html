@@ -471,15 +471,23 @@
 
                         <div class="activity-feed-list" data-activity-list>
                             {% for item in recent_activity %}
-                                <div class="activity-item">
+                                <div class="activity-item activity-type-{{ item.type_key|default:'info' }}">
                                     <div class="activity-item-left">
                                         <span class="activity-badge {{ item.badge_class|default:'activity-badge-info' }}">{{ item.type_label|default:item.title|default:'Change' }}</span>
                                         <div class="activity-details">
-                                            <span class="activity-file-name" title="{{ item.file_name|default:item.title|default:'File' }}">{{ item.file_name|default:item.title|default:'File' }}</span>
+                                            <div class="activity-file-name-row">
+                                                {% if item.type_key == 'renamed' and item.old_name %}
+                                                    <span class="activity-old-name" title="{{ item.old_name }}">{{ item.old_name }}</span>
+                                                    <span class="activity-rename-arrow">➔</span>
+                                                    <span class="activity-file-name" title="{{ item.file_name }}">{{ item.file_name }}</span>
+                                                {% else %}
+                                                    <span class="activity-file-name" title="{{ item.file_name|default:item.title|default:'File' }}">{{ item.file_name|default:item.title|default:'File' }}</span>
+                                                {% endif %}
+                                            </div>
                                             <span class="activity-meta">{{ item.details|default:item.detail|default:'Activity recorded' }}</span>
                                         </div>
                                     </div>
-                                    <span class="activity-time">{{ item.time_display|default:item.time|default:'Just now' }}</span>
+                                    <span class="activity-time" title="{{ item.time_absolute }}">{{ item.time_display|default:item.time|default:'Just now' }}</span>
                                 </div>
                             {% empty %}
                                 <div class="activity-empty" data-activity-empty>
@@ -865,19 +873,34 @@
             }
 
             listEl.innerHTML = activities.map(function (item) {
+                const typeKey = item.type_key || item.type || "info";
                 const badgeClass = item.badge_class || (item.tone ? `activity-badge-${item.tone}` : "activity-badge-info");
                 const typeLabel = item.type_label || item.title || "Change";
                 const fileName = item.file_name || item.title || "File";
+                const oldName = item.old_name || "";
                 const details = item.details || item.detail || "Activity recorded";
                 const timeDisplay = item.time_display || item.time || "Just now";
                 const timeAbsolute = item.time_absolute || "";
 
+                let fileNameHtml = "";
+                if (typeKey === "renamed" && oldName) {
+                    fileNameHtml = `
+                        <span class="activity-old-name" title="${escapeHtml(oldName)}">${escapeHtml(oldName)}</span>
+                        <span class="activity-rename-arrow">➔</span>
+                        <span class="activity-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>
+                    `;
+                } else {
+                    fileNameHtml = `<span class="activity-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>`;
+                }
+
                 return `
-                    <div class="activity-item">
+                    <div class="activity-item activity-type-${escapeHtml(typeKey)}">
                         <div class="activity-item-left">
                             <span class="activity-badge ${escapeHtml(badgeClass)}">${escapeHtml(typeLabel)}</span>
                             <div class="activity-details">
-                                <span class="activity-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>
+                                <div class="activity-file-name-row">
+                                    ${fileNameHtml}
+                                </div>
                                 <span class="activity-meta">${escapeHtml(details)}</span>
                             </div>
                         </div>
