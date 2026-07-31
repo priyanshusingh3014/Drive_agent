@@ -22,6 +22,18 @@ EXCLUDED_FOLDER_NAMES = {
     "recycled",
     "recycler",
     "system volume information",
+    "recovery",
+    "windows",
+    "programdata",
+    "appdata",
+    "node_modules",
+    "venv",
+    ".venv",
+    "__pycache__",
+    "msocache",
+    "config.msi",
+    "program files",
+    "program files (x86)",
 }
 WINDOWS_FILE_ATTRIBUTE_HIDDEN = 0x2
 WINDOWS_FILE_ATTRIBUTE_SYSTEM = 0x4
@@ -324,11 +336,15 @@ def _scan_dir_tree(dir_path, drive_root, known_paths, scan_has_completed, scan_s
                 for entry in entries:
                     try:
                         name = entry.name
-                        if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES:
+                        if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES or entry.is_symlink():
                             continue
 
                         is_dir = entry.is_dir(follow_symlinks=False)
                         stat_res = entry.stat(follow_symlinks=False)
+                        file_attrs = getattr(stat_res, "st_file_attributes", 0)
+
+                        if file_attrs & 0x400:  # Skip Windows Junction/Reparse Points
+                            continue
 
                         if is_dir:
                             subdirs.append(entry.path)
@@ -408,8 +424,13 @@ def _collect_files(
             for entry in entries:
                 try:
                     name = entry.name
-                    if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES:
+                    if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES or entry.is_symlink():
                         continue
+                    stat_res = entry.stat(follow_symlinks=False)
+                    file_attrs = getattr(stat_res, "st_file_attributes", 0)
+                    if file_attrs & 0x400:  # Skip Windows Junction/Reparse Points
+                        continue
+
                     if entry.is_dir(follow_symlinks=False):
                         top_dirs.append(entry.path)
                     elif entry.is_file(follow_symlinks=False):
