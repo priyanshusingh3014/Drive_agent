@@ -479,7 +479,7 @@
                                             <span class="activity-meta">{{ item.details|default:'Activity recorded' }}</span>
                                         </div>
                                     </div>
-                                    <span class="activity-time">{{ item.time_display|default:item.time|default:'Just now' }}</span>
+                                    <span class="activity-time" title="{{ item.time_absolute }}">{{ item.time_display|default:'Just now' }}</span>
                                 </div>
                             {% empty %}
                                 <div class="activity-empty" data-activity-empty>
