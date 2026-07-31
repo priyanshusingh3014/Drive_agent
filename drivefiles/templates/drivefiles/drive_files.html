@@ -463,9 +463,13 @@
                     </article>
 
                     <article class="card side-card activity-card" aria-label="Recent drive activity">
-                        <div class="activity-card-header">
+                        <div class="activity-card-header" style="display: flex; align-items: center; justify-content: space-between;">
                             <div class="activity-card-title">
                                 <h2>⚡ Recent Activity <small style="font-size: 11px; font-weight: 500; color: #64748b;">(Last 48 hrs)</small></h2>
+                            </div>
+                            <div class="activity-scroll-controls" style="display: flex; gap: 4px; align-items: center;">
+                                <button type="button" class="activity-scroll-btn" data-activity-scroll="up" title="Scroll Up" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #334155; font-size: 11px; font-weight: bold; transition: all 0.15s ease;">▲</button>
+                                <button type="button" class="activity-scroll-btn" data-activity-scroll="down" title="Scroll Down" style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; width: 26px; height: 26px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: #334155; font-size: 11px; font-weight: bold; transition: all 0.15s ease;">▼</button>
                             </div>
                         </div>
 
@@ -2153,6 +2157,18 @@
                 resetIdleLogoutTimer();
             });
         }
+
+        document.addEventListener("click", function (event) {
+            const scrollBtn = event.target.closest("[data-activity-scroll]");
+            if (scrollBtn) {
+                const listEl = document.querySelector("[data-activity-list]");
+                if (listEl) {
+                    const direction = scrollBtn.dataset.activityScroll;
+                    const scrollAmount = direction === "up" ? -120 : 120;
+                    listEl.scrollBy({ top: scrollAmount, behavior: "smooth" });
+                }
+            }
+        });
 
         document.addEventListener("click", function (event) {
             if (!event.target.closest(".utility-group") && !event.target.closest(".panel-tools")) {
