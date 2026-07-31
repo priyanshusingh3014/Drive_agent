@@ -176,6 +176,8 @@ def set_drive_root(drive_root):
         _start_watcher_for_current_drive()
 
     _request_scan()
+    if not _state.get("files"):
+        scan_drive()
     return True
 
 
