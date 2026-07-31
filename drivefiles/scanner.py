@@ -511,19 +511,20 @@ def _collect_files(
     }
 
 
-_previous_scan_file_map = {}
+_previous_scan_file_maps = {}
 
 
 def _process_local_scan_activities(new_files, drive_root):
-    global _previous_scan_file_map
-
+    drive_key = os.path.normcase(os.path.normpath(str(drive_root)))
     new_map = {f["path_key"]: f for f in new_files}
 
-    if not _previous_scan_file_map:
-        _previous_scan_file_map = new_map
+    old_map = _previous_scan_file_maps.get(drive_key)
+    _previous_scan_file_maps[drive_key] = new_map
+
+    if old_map is None:
         return
 
-    old_keys = set(_previous_scan_file_map.keys())
+    old_keys = set(old_map.keys())
     new_keys = set(new_map.keys())
 
     removed_keys = old_keys - new_keys
@@ -537,7 +538,7 @@ def _process_local_scan_activities(new_files, drive_root):
     matched_added = set()
 
     for rem_k in removed_keys:
-        old_f = _previous_scan_file_map[rem_k]
+        old_f = old_map[rem_k]
         for add_k in added_keys:
             if add_k in matched_added:
                 continue
@@ -553,7 +554,7 @@ def _process_local_scan_activities(new_files, drive_root):
                 break
 
     for rem_k in removed_keys - matched_removed:
-        old_f = _previous_scan_file_map[rem_k]
+        old_f = old_map[rem_k]
         deleted_files.append({
             "file_name": old_f["name"],
             "folder": old_f.get("folder") or "Root",
@@ -565,8 +566,6 @@ def _process_local_scan_activities(new_files, drive_root):
             "file_name": new_f["name"],
             "folder": new_f.get("folder") or "Root",
         })
-
-    _previous_scan_file_map = new_map
 
     if renamed_files or deleted_files or added_files:
         try:
