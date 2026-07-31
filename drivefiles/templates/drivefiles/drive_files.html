@@ -1848,6 +1848,7 @@
                 }
 
                 applyFilesPayload(data, "");
+                await refreshFiles({ force: true });
             } catch (error) {
                 if (actionSequence !== dashboardActionSequence) {
                     return;

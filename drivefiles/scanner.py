@@ -329,10 +329,6 @@ def _scan_dir_tree(dir_path, drive_root, known_paths, scan_has_completed, scan_s
 
                         is_dir = entry.is_dir(follow_symlinks=False)
                         stat_res = entry.stat(follow_symlinks=False)
-                        file_attrs = getattr(stat_res, "st_file_attributes", 0)
-
-                        if file_attrs & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
-                            continue
 
                         if is_dir:
                             subdirs.append(entry.path)
@@ -414,11 +410,6 @@ def _collect_files(
                     name = entry.name
                     if name.startswith(".") or name.lower() in EXCLUDED_FOLDER_NAMES:
                         continue
-                    stat_res = entry.stat(follow_symlinks=False)
-                    file_attrs = getattr(stat_res, "st_file_attributes", 0)
-                    if file_attrs & WINDOWS_HIDDEN_OR_SYSTEM_ATTRIBUTES:
-                        continue
-
                     if entry.is_dir(follow_symlinks=False):
                         top_dirs.append(entry.path)
                     elif entry.is_file(follow_symlinks=False):
