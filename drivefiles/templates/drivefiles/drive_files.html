@@ -303,74 +303,75 @@
                     <div class="panel-head">
                         <div class="panel-title">
                             <span class="small-mark">
-                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <path d="M14 2v6h6"></path>
-                                    <path d="M8 13h8"></path>
-                                    <path d="M8 17h6"></path>
-                                </svg>
-                            </span>
-                            <h2>Indexed Files (<span data-drive-label>{{ drive_label }}</span>)</h2>
-                            <span class="file-count" data-current-files>{{ current_files_display }} files</span>
+                            <h2>Drive File Index</h2>
+                            <span class="file-count" data-file-count>{{ total_files_display }} files</span>
                         </div>
 
                         <div class="panel-tools">
-                            <button type="button" class="filter-button{% if filter_type != 'all' %} active{% endif %}" data-filter-toggle>
-                                <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M3 4h18l-7 8v6l-4 2v-8z"></path>
+                            <button
+                                class="filter-button"
+                                type="button"
+                                data-filter-trigger
+                                aria-expanded="false"
+                                aria-haspopup="menu"
+                            >
+                                <span>Filter: <strong data-filter-label>All Files</strong></span>
+                                <svg class="icon chevron" viewBox="0 0 24 24" aria-hidden="true">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
                                 </svg>
-                                <span data-filter-label>
-                                    {% for option in filter_options %}{% if filter_type == option.value %}{{ option.label }}{% endif %}{% endfor %}
-                                </span>
                             </button>
 
-                            <div class="dropdown-menu filter-menu" data-filter-menu hidden>
-                                <p class="dropdown-title">File Type</p>
-                                {% for option in filter_options %}
-                                    <button
-                                        type="button"
-                                        class="dropdown-item{% if filter_type == option.value %} active{% endif %}"
-                                        data-filter-value="{{ option.value }}"
-                                    >
-                                        {{ option.label }}
-                                    </button>
-                                {% endfor %}
+                            <div class="dropdown-menu filter-menu" data-filter-menu role="menu">
+                                <div class="dropdown-header">
+                                    <p class="dropdown-title">Filter by Category</p>
+                                </div>
+                                <div class="dropdown-body">
+                                    {% for option in filter_options %}
+                                        <button
+                                            class="dropdown-item {% if option.value == filter_type %}active{% endif %}"
+                                            type="button"
+                                            data-filter-value="{{ option.value }}"
+                                            role="menuitem"
+                                        >
+                                            <span>{{ option.label }}</span>
+                                            {% if option.value == filter_type %}
+                                                <span class="check-mark">✓</span>
+                                            {% endif %}
+                                        </button>
+                                    {% endfor %}
+                                </div>
                             </div>
 
-                            <form method="GET" class="search-form table-search" data-search-form>
-                                <div class="search-field">
-                                    <span class="search-icon"></span>
-                                    <input
-                                        type="text"
-                                        name="search"
-                                        value="{{ search_query }}"
-                                        placeholder="Search files..."
-                                        aria-label="Search files"
-                                        class="search-input"
-                                        data-search-input
-                                    >
-                                </div>
-                                <button type="submit" class="table-search-button" aria-label="Search files">
+                            <form class="table-search" method="get" action="{% url 'drive_files' %}">
+                                <input
+                                    class="search-input"
+                                    type="text"
+                                    name="search"
+                                    value="{{ search_query }}"
+                                    placeholder="Search files..."
+                                    aria-label="Search indexed files"
+                                    data-search-input
+                                >
+                                <button class="table-search-button" type="submit" aria-label="Run search">
                                     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
                                         <circle cx="11" cy="11" r="8"></circle>
-                                        <path d="m21 21-4.3-4.3"></path>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                     </svg>
                                 </button>
                             </form>
                         </div>
                     </div>
 
-                    <div class="table-wrap" data-file-scroll tabindex="0">
+                    <div class="table-wrap" data-file-scroll>
                         <table>
                             <thead>
                                 <tr>
-                                    <th>File Name</th>
-                                    <th>Path</th>
-                                    <th>Type</th>
-                                    <th>Size</th>
+                                    <th scope="col">File Name</th>
+                                    <th scope="col">Folder Location</th>
+                                    <th scope="col">Category</th>
+                                    <th scope="col">File Size</th>
                                 </tr>
                             </thead>
-
                             <tbody data-file-rows>
                                 {% include "drivefiles/_file_rows.html" %}
                             </tbody>
@@ -382,81 +383,79 @@
                             Showing {{ page_start_display }} to {{ page_end_display }} of {{ total_matching_display }} files
                         </p>
 
-                        <div class="pagination" data-pagination-controls>
-                            <button type="button" class="page-button" data-page-prev{% if not has_previous_page %} disabled{% endif %} aria-label="Previous page">
-                                <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="m15 18-6-6 6-6"></path>
-                                </svg>
-                            </button>
-
+                        <nav class="pagination" aria-label="Table pagination" data-pagination-controls>
                             {% for page in pagination_pages %}
                                 {% if page == "ellipsis" %}
                                     <span class="page-gap">...</span>
                                 {% else %}
-                                    <button type="button" class="page-button{% if page_number == page %} active{% endif %}" data-page="{{ page }}">
+                                    <button
+                                        class="page-button {% if page == page_number %}active{% endif %}"
+                                        type="button"
+                                        data-page="{{ page }}"
+                                    >
                                         {{ page }}
                                     </button>
                                 {% endif %}
                             {% endfor %}
-
-                            <button type="button" class="page-button" data-page-next{% if not has_next_page %} disabled{% endif %} aria-label="Next page">
-                                <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="m9 18 6-6-6-6"></path>
-                                </svg>
-                            </button>
-                        </div>
+                        </nav>
                     </footer>
                 </article>
 
-                <aside class="side-stack">
-                    <article class="card side-card distribution-card" aria-label="File type distribution">
-                        <h2>File Type Distribution</h2>
+                <aside class="sidebar-cards" aria-label="Secondary metrics">
+                    <article class="card side-card chart-card">
+                        <div class="chart-header">
+                            <h2>File Category Distribution</h2>
+                            <p class="chart-subtitle">Breakdown by file extension groups</p>
+                        </div>
 
                         <div class="chart-row">
-                            <div
-                                class="donut"
-                                data-donut
-                                data-initial-gradient="{{ distribution_gradient }}"
-                            >
-                                <div class="donut-center">
-                                    <strong class="donut-total" data-donut-total>{{ total_files_display }}</strong>
-                                    <span class="donut-label">Total Files</span>
+                            <div class="donut-wrap">
+                                <div
+                                    class="donut-chart"
+                                    data-donut-chart
+                                    style="background: {{ distribution_gradient }};"
+                                >
+                                    <div class="donut-hole">
+                                        <span class="donut-total" data-total-files-display>{{ total_files_display }}</span>
+                                        <span class="donut-label">Total Files</span>
+                                    </div>
                                 </div>
                             </div>
 
                             <ul class="distribution-list" data-distribution-list>
                                 {% for item in distribution_items %}
                                     <li class="distribution-item">
-                                        <span class="distribution-color distribution-{{ item.key }}"></span>
-                                        <span class="distribution-name">{{ item.name }}</span>
-                                        <span class="distribution-count">{{ item.count_display }} ({{ item.percent_display }}%)</span>
+                                        <div class="dist-left">
+                                            <span class="dist-color" style="background: {{ item.color }};"></span>
+                                            <span class="dist-name">{{ item.name }}</span>
+                                        </div>
+                                        <div class="dist-right">
+                                            <span class="dist-count">{{ item.count_display }}</span>
+                                            <span class="dist-percent">({{ item.percent_display }})</span>
+                                        </div>
                                     </li>
                                 {% endfor %}
                             </ul>
                         </div>
                     </article>
 
-                    <article class="card side-card" id="settings" aria-label="Storage usage">
-                        <h2>Storage Usage (<span data-drive-label>{{ drive_label }}</span>)</h2>
+                    <article class="card side-card storage-card">
+                        <div class="storage-head">
+                            <span class="storage-title">Drive Storage Usage</span>
+                            <span class="storage-used-tag" data-storage-used>{{ storage_info.used_display }} used</span>
+                        </div>
 
-                        <div class="storage-body">
-                            <div class="storage-track">
-                                <div
-                                    class="storage-fill"
-                                    data-storage-fill
-                                    data-initial-width="{{ storage_info.percent_used }}"
-                                ></div>
-                            </div>
+                        <div class="storage-track">
+                            <div
+                                class="storage-fill"
+                                data-storage-fill
+                                style="width: {{ storage_info.percent_used }}%;"
+                            ></div>
+                        </div>
 
-                            <div class="storage-row">
-                                <span>
-                                    <span data-storage-used>{{ storage_info.used_display }}</span> /
-                                    <span data-storage-total>{{ storage_info.total_display }}</span> used
-                                </span>
-                                <strong data-storage-percent>{{ storage_info.percent_used }}%</strong>
-                            </div>
-
-                            <p class="storage-free">
+                        <div class="storage-foot">
+                            <p class="storage-text">
+                                Total <span data-storage-total>{{ storage_info.total_display }}</span> —
                                 <span data-storage-free>{{ storage_info.free_display }}</span> free
                             </p>
                         </div>
@@ -469,7 +468,7 @@
                             </div>
                         </div>
 
-                        <div class="activity-feed-list" data-activity-list>
+                        <div class="activity-feed-list" data-activity-list style="max-height: 250px; overflow-y: scroll;">
                             {% for item in recent_activity %}
                                 <div class="activity-item activity-type-{{ item.type_key|default:'info' }}">
                                     <div class="activity-item-left">
