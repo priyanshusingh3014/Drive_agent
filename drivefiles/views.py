@@ -421,21 +421,8 @@ def _format_relative_time(value):
     if not value:
         return "Never"
 
-    seconds = max(0, int((timezone.now() - value).total_seconds()))
-
-    if seconds < 10:
-        return "Just now"
-
-    if seconds < 60:
-        return f"{seconds}s ago"
-
-    minutes = seconds // 60
-
-    if minutes < 60:
-        return f"{minutes}m ago"
-
-    hours = minutes // 60
-    return f"{hours}h ago"
+    local_ts = timezone.localtime(value) if timezone.is_aware(value) else value
+    return local_ts.strftime("%b %d, %Y %I:%M %p")
 
 
 def _active_agent_cutoff():
