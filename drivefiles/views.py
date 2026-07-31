@@ -544,6 +544,11 @@ def log_local_scan_activities(added_files, renamed_files, deleted_files, drive_r
 
 def _build_recent_activities(drive_report=None, agent=None, limit=100, hours=48):
     cutoff_time = timezone.now() - timedelta(hours=hours)
+    try:
+        DriveActivityLog.objects.filter(timestamp__lt=cutoff_time).delete()
+    except Exception:
+        pass
+
     queryset = DriveActivityLog.objects.filter(timestamp__gte=cutoff_time).order_by('-timestamp')
 
     if drive_report:
@@ -565,6 +570,8 @@ def _build_recent_activities(drive_report=None, agent=None, limit=100, hours=48)
             log.activity_type,
             ("other", "ℹ️ Change", "activity-badge-info"),
         )
+        local_ts = timezone.localtime(log.timestamp) if timezone.is_aware(log.timestamp) else log.timestamp
+        exact_time_str = local_ts.strftime("%b %d, %Y %I:%M %p")
         activities.append(
             {
                 "id": log.id,
@@ -574,8 +581,8 @@ def _build_recent_activities(drive_report=None, agent=None, limit=100, hours=48)
                 "file_name": log.file_name,
                 "old_name": log.old_name,
                 "details": log.details or f"Activity in {log.drive.label if log.drive else 'Drive'}",
-                "time_display": _format_relative_time(log.timestamp),
-                "time_absolute": log.timestamp.strftime("%b %d, %Y %H:%M"),
+                "time_display": exact_time_str,
+                "time_absolute": exact_time_str,
                 "drive_label": log.drive.label if log.drive else "",
             }
         )
