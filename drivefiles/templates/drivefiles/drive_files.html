@@ -3,123 +3,81 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
-
-    <title>{{ dashboard_title }}</title>
-    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260728-fast-scroll-1000">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOLDFIT Backup Vault — System Telemetry</title>
+    <link rel="stylesheet" href="{% static 'drivefiles/css/dashboard.css' %}?v=20260801-boldfit-vault">
 </head>
 
 <body>
 
 <main class="app" id="dashboard">
+    <!-- SIDEBAR -->
     <aside class="sidebar">
         <div class="brand">
-            <div class="brand-mark" data-drive-initial>{{ drive_initial }}</div>
-            <p class="brand-name">DriveAgent</p>
+            <div class="brand-avatar">BF</div>
+            <div class="brand-info">
+                <span class="brand-title">BOLDFIT</span>
+                <span class="brand-sub">BACKUP VAULT</span>
+            </div>
         </div>
 
         <nav class="nav" aria-label="Dashboard sections">
-            <a class="nav-link active" href="#dashboard" data-local-dashboard>
-                <span class="nav-icon">
-                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <rect x="3" y="3" width="7" height="7"></rect>
-                        <rect x="14" y="3" width="7" height="7"></rect>
-                        <rect x="3" y="14" width="7" height="7"></rect>
-                        <rect x="14" y="14" width="7" height="7"></rect>
-                    </svg>
-                </span>
+            <a class="nav-link active" href="#dashboard">
+                <span class="nav-icon">🎛️</span>
                 <span class="nav-text">Dashboard</span>
             </a>
-
-            <section class="sidebar-user-panel" aria-label="Active users">
-                <div class="sidebar-user-head">
-                    <span class="nav-icon">
-                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                            <circle cx="9" cy="7" r="4"></circle>
-                            <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
-                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                        </svg>
-                    </span>
-                    <span class="nav-text">Active Users</span>
-                    <span class="sidebar-user-count" data-active-agents-online>{{ active_agents_total }}</span>
-                </div>
-
-                <div class="sidebar-user-list" data-active-agents-list>
-                    {% for agent in active_agents %}
-                        <button
-                            type="button"
-                            class="sidebar-user-button{% if agent.agent_id == selected_agent_id %} selected{% endif %}"
-                            data-agent-id="{{ agent.agent_id }}"
-                            title="{{ agent.ip_address }} | {{ agent.mac_address }}"
-                        >
-                            <span class="sidebar-user-dot"></span>
-                            <span class="sidebar-user-text">
-                                <span class="sidebar-user-name">{{ agent.host_name }}</span>
-                                <span class="sidebar-user-meta">{{ agent.drive_count }} drives | {{ agent.total_files_display }} files</span>
-                            </span>
-                        </button>
-                    {% endfor %}
-                </div>
-
-                <p class="sidebar-users-empty"{% if active_agents %} hidden{% endif %} data-active-agents-empty>
-                    No active users
-                </p>
-            </section>
+            <a class="nav-link" href="#devices">
+                <span class="nav-icon">💻</span>
+                <span class="nav-text">Devices</span>
+            </a>
+            <a class="nav-link" href="#files">
+                <span class="nav-icon">📁</span>
+                <span class="nav-text">Backup Jobs</span>
+            </a>
+            <a class="nav-link" href="#storage">
+                <span class="nav-icon">💾</span>
+                <span class="nav-text">Storage</span>
+            </a>
+            <a class="nav-link" href="#activity">
+                <span class="nav-icon">🔄</span>
+                <span class="nav-text">Recovery</span>
+            </a>
+            <a class="nav-link" href="#security">
+                <span class="nav-icon">🛡️</span>
+                <span class="nav-text">Security</span>
+            </a>
+            <a class="nav-link" href="#logs">
+                <span class="nav-icon">💻</span>
+                <span class="nav-text">Logs</span>
+            </a>
+            <a class="nav-link" href="#settings">
+                <span class="nav-icon">⚙️</span>
+                <span class="nav-text">Settings</span>
+            </a>
         </nav>
 
-        <div class="sidebar-bottom">
-            <section class="agent-card" aria-label="Agent status">
-                <div class="agent-status-row">
-                    <div>
-                        <p class="agent-dot-line">
-                            <span class="live-dot"></span>
-                            <span>Agent Status</span>
-                        </p>
-                        <p class="online-text">Online</p>
-                    </div>
-
-                    <span class="agent-shield">&#10003;</span>
-                </div>
-            </section>
-
+        <div class="sidebar-footer">
+            <div class="sidebar-status-pill">
+                <span class="status-dot green"></span>
+                <span>System Operational</span>
+            </div>
         </div>
     </aside>
 
+    <!-- WORKSPACE -->
     <section class="workspace">
+        <!-- TOPBAR -->
         <header class="topbar">
-            <form method="GET" class="search-form top-search" data-search-form>
-                <div class="search-field">
-                    <span class="search-icon"></span>
-                    <input
-                        type="text"
-                        name="search"
-                        value="{{ search_query }}"
-                        placeholder="Search files and folders..."
-                        aria-label="Search files and folders"
-                        class="search-input"
-                        data-search-input
-                    >
-                </div>
-                <span class="shortcut">Ctrl + K</span>
-            </form>
-
-            <span class="topbar-spacer" aria-hidden="true"></span>
+            <div class="topbar-core-pill">
+                <span class="core-icon">🛡️</span>
+                <span class="core-text">Enterprise Agent Core v1.0.4 • Status: Healthy</span>
+            </div>
 
             <div class="top-actions">
                 <form method="POST" action="{% url 'select_drive' %}" class="drive-select-form" data-drive-select-form>
                     {% csrf_token %}
                     <label class="drive-select-control" for="drive-select">
-                        <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                            <path d="M4 7a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7Z"></path>
-                            <path d="M8 8h8"></path>
-                            <path d="M8 16h8"></path>
-                        </svg>
-                        <span class="drive-select-label">Select Drive</span>
+                        <span>Drive:</span>
                         <select id="drive-select" name="drive_root" class="drive-select" data-drive-select>
                             {% for option in drive_options %}
                                 <option value="{{ option.value }}"{% if option.selected %} selected{% endif %}>
@@ -130,232 +88,64 @@
                     </label>
                 </form>
 
-                <button type="button" class="action-button secondary" data-pull-files>
-                    <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 3v12"></path>
-                        <path d="m7 10 5 5 5-5"></path>
-                        <path d="M5 21h14"></path>
-                    </svg>
-                    Pull Files
-                </button>
+                <button type="button" class="topbar-icon-btn" title="Notifications">🔔</button>
 
-                <div class="utility-group">
-                    <button type="button" class="profile-button" data-profile-toggle aria-haspopup="menu" aria-expanded="false">
-                        <span>Admin</span>
-                    </button>
-
-                    <div class="dropdown-menu" data-profile-menu hidden>
-                        <form method="POST" action="{% url 'logout' %}" class="logout-form">
-                            {% csrf_token %}
-                            <button type="submit" class="dropdown-item danger">
-                                <svg class="icon dropdown-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                                    <path d="M16 17l5-5-5-5"></path>
-                                    <path d="M21 12H9"></path>
-                                </svg>
-                                <span>Logout</span>
-                            </button>
-                        </form>
+                <div class="topbar-user-badge">
+                    <div class="user-avatar-red">BF</div>
+                    <div class="user-info">
+                        <span class="user-name">Admin User</span>
+                        <span class="user-role">Super Admin</span>
                     </div>
                 </div>
             </div>
         </header>
 
+        <!-- MAIN CONTENT -->
         <main class="content">
             <section class="page-head">
-                <div>
-                    <div class="title-row">
-                        <span class="title-icon">
-                            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <rect x="3" y="4" width="18" height="13" rx="2"></rect>
-                                <path d="M8 21h8"></path>
-                                <path d="M12 17v4"></path>
-                            </svg>
-                        </span>
-                        <h1 data-dashboard-title>{{ dashboard_title }}</h1>
-                    </div>
-                    <p class="subtitle">
-                        Pulls and indexes <span data-title-total>{{ total_files_display }}</span> files from <span data-drive-label>{{ drive_label }}</span> and provides real-time system and file insights.
-                    </p>
-                </div>
-
+                <h1 class="page-title">System Telemetry & Overview</h1>
+                <p class="page-subtitle">Real-time status of backup agents, vault storage, and scheduled tasks</p>
             </section>
 
-            <div class="message-stack">
-                {% if error_message %}
-                    <p class="error" data-error-message>
-                        {{ error_message }}
-                    </p>
-                {% else %}
-                    <p class="error" data-error-message hidden></p>
-                {% endif %}
-            </div>
-
-            <section class="top-cards" id="devices">
-                <article class="card status-card">
-                    <p class="card-label">
-                        <span class="small-mark">
-                            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <ellipse cx="12" cy="5" rx="8" ry="3"></ellipse>
-                                <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"></path>
-                                <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"></path>
-                            </svg>
-                        </span>
-                        File Pull Status
-                    </p>
-
-                    <div class="sync-row">
-                        <span class="sync-badge">&#10003;</span>
-                        <span data-sync-title>{{ sync_status_title }}</span>
-                    </div>
-
-                    <p class="indexed-line">
-                        <span data-processed-files>{{ processed_files_display }}</span> /
-                        <span data-total-files>{{ total_files_display }}</span> files indexed
-                    </p>
-
-                    <div class="progress-line">
-                        <div class="progress-track">
-                            <div
-                                class="progress-fill"
-                                data-progress-fill
-                                data-initial-width="{{ progress_percent }}"
-                            ></div>
-                        </div>
-                        <span class="progress-percent" data-progress-value>{{ progress_percent }}%</span>
-                    </div>
-
-                    <div class="metric-strip">
-                        <div class="metric-cell">
-                            <span class="metric-label">Total Files</span>
-                            <span class="metric-number" data-total-files-card>{{ total_files_display }}</span>
-                        </div>
-
-                        <div class="metric-cell">
-                            <span class="metric-label">Processed</span>
-                            <span class="metric-number green" data-processed-files-card>{{ processed_files_display }}</span>
-                        </div>
-
-                        <div class="metric-cell">
-                            <span class="metric-label">Failed</span>
-                            <span class="metric-number red" data-failed-files>{{ failed_files_display }}</span>
-                        </div>
-                    </div>
+            <!-- 3 KPI TELEMETRY CARDS -->
+            <section class="boldfit-kpi-grid">
+                <article class="kpi-card">
+                    <span class="kpi-label">Active Agents</span>
+                    <strong class="kpi-value"><span data-active-agents-online>{{ active_agents_total }}</span> Online</strong>
                 </article>
 
-                <article class="card system-card">
-                    <div class="system-item">
-                        <span class="circle-icon host">
-                            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <rect x="3" y="4" width="18" height="13" rx="2"></rect>
-                                <path d="M8 21h8"></path>
-                                <path d="M12 17v4"></path>
-                            </svg>
-                        </span>
-                        <span class="system-label">Host Name</span>
-                        <strong class="system-value" data-system-host>{{ system_info.host_name }}</strong>
-                        <span class="system-sub">
-                            <span data-system-os>{{ system_info.os_label }}</span><br>
-                            <span data-system-architecture>{{ system_info.architecture }}</span>
-                        </span>
-                    </div>
+                <article class="kpi-card">
+                    <span class="kpi-label kpi-label-red">Vault Storage Used</span>
+                    <strong class="kpi-value kpi-value-red"><span data-storage-used>{{ storage_info.used_display }}</span> / <span data-storage-total>{{ storage_info.total_display }}</span></strong>
+                </article>
 
-                    <div class="system-item">
-                        <span class="circle-icon ip">
-                            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M12 3v6"></path>
-                                <rect x="9" y="9" width="6" height="6" rx="1"></rect>
-                                <path d="M12 15v3"></path>
-                                <path d="M5 18h14"></path>
-                                <rect x="3" y="18" width="4" height="3"></rect>
-                                <rect x="10" y="18" width="4" height="3"></rect>
-                                <rect x="17" y="18" width="4" height="3"></rect>
-                            </svg>
-                        </span>
-                        <span class="system-label">IP Address</span>
-                        <strong class="system-value" data-system-ip>{{ system_info.ip_address }}</strong>
-                        <span class="system-sub">Private Network<br>IPv4</span>
-                    </div>
-
-                    <div class="system-item">
-                        <span class="circle-icon mac">
-                            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                <rect x="9" y="3" width="6" height="6" rx="1"></rect>
-                                <path d="M12 9v4"></path>
-                                <path d="M5 13h14"></path>
-                                <path d="M5 13v3"></path>
-                                <path d="M12 13v3"></path>
-                                <path d="M19 13v3"></path>
-                                <rect x="3" y="16" width="4" height="5" rx="1"></rect>
-                                <rect x="10" y="16" width="4" height="5" rx="1"></rect>
-                                <rect x="17" y="16" width="4" height="5" rx="1"></rect>
-                            </svg>
-                        </span>
-                        <span class="system-label">MAC Address</span>
-                        <strong class="system-value" data-system-mac>{{ system_info.mac_address }}</strong>
-                        <span class="system-sub">Physical Address<br>Primary Adapter</span>
-                    </div>
+                <article class="kpi-card">
+                    <span class="kpi-label">Scheduled Jobs</span>
+                    <strong class="kpi-value"><span data-total-files>{{ total_files_display }}</span> Active</strong>
                 </article>
             </section>
 
+            <!-- MAIN GRID -->
             <section class="dashboard-grid">
                 <article class="card file-panel" id="files">
                     <div class="panel-head">
                         <div class="panel-title">
-                            <span class="small-mark">
-                                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                    <path d="M14 2v6h6"></path>
-                                    <path d="M8 13h8"></path>
-                                    <path d="M8 17h6"></path>
-                                </svg>
-                            </span>
-                            <h2>Indexed Files (<span data-drive-label>{{ drive_label }}</span>)</h2>
-                            <span class="file-count" data-current-files>{{ current_files_display }} files</span>
+                            <h2>Recent Backup Activities & Files (<span data-drive-label>{{ drive_label }}</span>)</h2>
                         </div>
 
                         <div class="panel-tools">
-                            <button type="button" class="filter-button{% if filter_type != 'all' %} active{% endif %}" data-filter-toggle>
-                                <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="M3 4h18l-7 8v6l-4 2v-8z"></path>
-                                </svg>
-                                <span data-filter-label>
-                                    {% for option in filter_options %}{% if filter_type == option.value %}{{ option.label }}{% endif %}{% endfor %}
-                                </span>
-                            </button>
-
-                            <div class="dropdown-menu filter-menu" data-filter-menu hidden>
-                                <p class="dropdown-title">File Type</p>
-                                {% for option in filter_options %}
-                                    <button
-                                        type="button"
-                                        class="dropdown-item{% if filter_type == option.value %} active{% endif %}"
-                                        data-filter-value="{{ option.value }}"
-                                    >
-                                        {{ option.label }}
-                                    </button>
-                                {% endfor %}
-                            </div>
-
-                            <form method="GET" class="search-form table-search" data-search-form>
+                            <form method="GET" class="search-form" data-search-form>
                                 <div class="search-field">
-                                    <span class="search-icon"></span>
+                                    <span class="search-icon">🔍</span>
                                     <input
                                         type="text"
                                         name="search"
                                         value="{{ search_query }}"
                                         placeholder="Search files..."
-                                        aria-label="Search files"
                                         class="search-input"
                                         data-search-input
                                     >
                                 </div>
-                                <button type="submit" class="table-search-button" aria-label="Search files">
-                                    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                                        <circle cx="11" cy="11" r="8"></circle>
-                                        <path d="m21 21-4.3-4.3"></path>
-                                    </svg>
-                                </button>
                             </form>
                         </div>
                     </div>
@@ -364,108 +154,45 @@
                         <table>
                             <thead>
                                 <tr>
-                                    <th>File Name</th>
+                                    <th>Event / File Name</th>
                                     <th>Path</th>
                                     <th>Type</th>
-                                    <th>Size</th>
+                                    <th>Data Size</th>
+                                    <th>Status</th>
                                 </tr>
                             </thead>
-
                             <tbody data-file-rows>
                                 {% include "drivefiles/_file_rows.html" %}
                             </tbody>
                         </table>
                     </div>
 
-                    <footer class="table-footer">
-                        <p class="page-summary" data-page-summary>
+                    <footer class="table-footer" style="padding-top: 14px; display: flex; justify-content: space-between; align-items: center;">
+                        <p class="page-summary" data-page-summary style="font-size: 12px; color: var(--text-muted);">
                             Showing {{ page_start_display }} to {{ page_end_display }} of {{ total_matching_display }} files
                         </p>
 
-                        <div class="pagination" data-pagination-controls>
-                            <button type="button" class="page-button" data-page-prev{% if not has_previous_page %} disabled{% endif %} aria-label="Previous page">
-                                <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="m15 18-6-6 6-6"></path>
-                                </svg>
-                            </button>
+                        <div class="pagination" data-pagination-controls style="display: flex; gap: 4px;">
+                            <button type="button" class="page-button" data-page-prev{% if not has_previous_page %} disabled{% endif %}>‹</button>
 
                             {% for page in pagination_pages %}
                                 {% if page == "ellipsis" %}
-                                    <span class="page-gap">...</span>
+                                    <span>...</span>
                                 {% else %}
-                                    <button type="button" class="page-button{% if page_number == page %} active{% endif %}" data-page="{{ page }}">
-                                        {{ page }}
-                                    </button>
+                                    <button type="button" class="page-button{% if page_number == page %} active{% endif %}" data-page="{{ page }}">{{ page }}</button>
                                 {% endif %}
                             {% endfor %}
 
-                            <button type="button" class="page-button" data-page-next{% if not has_next_page %} disabled{% endif %} aria-label="Next page">
-                                <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path d="m9 18 6-6-6-6"></path>
-                                </svg>
-                            </button>
+                            <button type="button" class="page-button" data-page-next{% if not has_next_page %} disabled{% endif %}>›</button>
                         </div>
                     </footer>
                 </article>
 
                 <aside class="side-stack">
-                    <article class="card side-card distribution-card" aria-label="File type distribution">
-                        <h2>File Type Distribution</h2>
-
-                        <div class="chart-row">
-                            <div
-                                class="donut"
-                                data-donut
-                                data-initial-gradient="{{ distribution_gradient }}"
-                            >
-                                <div class="donut-center">
-                                    <strong class="donut-total" data-donut-total>{{ total_files_display }}</strong>
-                                    <span class="donut-label">Total Files</span>
-                                </div>
-                            </div>
-
-                            <ul class="distribution-list" data-distribution-list>
-                                {% for item in distribution_items %}
-                                    <li class="distribution-item">
-                                        <span class="distribution-color distribution-{{ item.key }}"></span>
-                                        <span class="distribution-name">{{ item.name }}</span>
-                                        <span class="distribution-count">{{ item.count_display }} ({{ item.percent_display }}%)</span>
-                                    </li>
-                                {% endfor %}
-                            </ul>
-                        </div>
-                    </article>
-
-                    <article class="card side-card" id="settings" aria-label="Storage usage">
-                        <h2>Storage Usage (<span data-drive-label>{{ drive_label }}</span>)</h2>
-
-                        <div class="storage-body">
-                            <div class="storage-track">
-                                <div
-                                    class="storage-fill"
-                                    data-storage-fill
-                                    data-initial-width="{{ storage_info.percent_used }}"
-                                ></div>
-                            </div>
-
-                            <div class="storage-row">
-                                <span>
-                                    <span data-storage-used>{{ storage_info.used_display }}</span> /
-                                    <span data-storage-total>{{ storage_info.total_display }}</span> used
-                                </span>
-                                <strong data-storage-percent>{{ storage_info.percent_used }}%</strong>
-                            </div>
-
-                            <p class="storage-free">
-                                <span data-storage-free>{{ storage_info.free_display }}</span> free
-                            </p>
-                        </div>
-                    </article>
-
                     <article class="card side-card activity-card" aria-label="Recent drive activity">
-                        <div class="activity-card-header">
+                        <div class="panel-head">
                             <div class="activity-card-title">
-                                <h2>⚡ Recent Activity <small style="font-size: 11px; font-weight: 500; color: #64748b;">(Last 48 hrs)</small></h2>
+                                <h2>⚡ Recent Activity</h2>
                             </div>
                         </div>
 
@@ -497,8 +224,34 @@
                         </div>
                     </article>
 
+                    <article class="card side-card distribution-card">
+                        <div class="panel-head">
+                            <h2>File Type Distribution</h2>
+                        </div>
+
+                        <div class="chart-row">
+                            <ul class="distribution-list" data-distribution-list>
+                                {% for item in distribution_items %}
+                                    <li class="distribution-item" style="display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f1f5f9;">
+                                        <span class="distribution-name" style="font-weight: 600; font-size: 12.5px;">{{ item.name }}</span>
+                                        <span class="distribution-count" style="font-size: 12px; color: var(--text-muted);">{{ item.count_display }} ({{ item.percent_display }}%)</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </article>
                 </aside>
             </section>
+
+            <!-- VAULT FOOTER -->
+            <footer class="vault-footer">
+                <div class="footer-left">
+                    <span style="color: var(--brand-crimson);">🔴</span> © 2026 <strong>Boldfit Backup Vault</strong>. All rights reserved.
+                </div>
+                <div class="footer-right">
+                    <span class="vault-sec-badge">Encrypted TLS v1.3 • AES-256 Storage</span>
+                </div>
+            </footer>
         </main>
     </section>
 </main>
@@ -507,7 +260,6 @@
     (function () {
         const refreshIntervalMs = {{ refresh_interval_ms }};
         const activeAgentsRefreshIntervalMs = {{ active_agents_refresh_interval_ms }};
-        const idleLogoutMs = 60 * 1000;
         const scrollBatchSize = 10000;
         const dataUrl = "{% url 'drive_files_data' %}";
         const activeAgentsUrl = "{% url 'active_agents_data' %}";
@@ -521,1313 +273,26 @@
         const rowsElement = document.querySelector("[data-file-rows]");
         const errorElement = document.querySelector("[data-error-message]");
         const scanStatusTextElement = document.querySelector("[data-sync-title]");
-        const progressFillElement = document.querySelector("[data-progress-fill]");
-        const progressValueElement = document.querySelector("[data-progress-value]");
-        const dashboardTitleElements = document.querySelectorAll("[data-dashboard-title]");
-        const driveInitialElements = document.querySelectorAll("[data-drive-initial]");
-        const driveLabelElements = document.querySelectorAll("[data-drive-label]");
-        const totalFilesElements = document.querySelectorAll("[data-total-files], [data-total-files-card], [data-donut-total], [data-title-total]");
-        const processedFilesElements = document.querySelectorAll("[data-processed-files], [data-processed-files-card]");
-        const failedFilesElement = document.querySelector("[data-failed-files]");
-        const currentFilesElement = document.querySelector("[data-current-files]");
-        const donutElement = document.querySelector("[data-donut]");
-        const distributionListElement = document.querySelector("[data-distribution-list]");
-        const storageFillElement = document.querySelector("[data-storage-fill]");
-        const storageUsedElement = document.querySelector("[data-storage-used]");
-        const storageTotalElement = document.querySelector("[data-storage-total]");
-        const storageFreeElement = document.querySelector("[data-storage-free]");
-        const storagePercentElement = document.querySelector("[data-storage-percent]");
-        const activeAgentsListElement = document.querySelector("[data-active-agents-list]");
-        const activeAgentsEmptyElement = document.querySelector("[data-active-agents-empty]");
-        const activeAgentsOnlineElement = document.querySelector("[data-active-agents-online]");
-        const localDashboardLink = document.querySelector("[data-local-dashboard]");
-        const systemHostElement = document.querySelector("[data-system-host]");
-        const systemIpElement = document.querySelector("[data-system-ip]");
-        const systemMacElement = document.querySelector("[data-system-mac]");
-        const systemOsElement = document.querySelector("[data-system-os]");
-        const systemArchitectureElement = document.querySelector("[data-system-architecture]");
-        const pageSummaryElement = document.querySelector("[data-page-summary]");
-        const paginationControlsElement = document.querySelector("[data-pagination-controls]");
-        const filterToggle = document.querySelector("[data-filter-toggle]");
-        const filterLabelElement = document.querySelector("[data-filter-label]");
-        const filterMenu = document.querySelector("[data-filter-menu]");
-        const profileToggle = document.querySelector("[data-profile-toggle]");
-        const profileMenu = document.querySelector("[data-profile-menu]");
         const driveSelectForm = document.querySelector("[data-drive-select-form]");
         const driveSelect = document.querySelector("[data-drive-select]");
-        const logoutForm = document.querySelector(".logout-form");
-        const csrfInput = document.querySelector("[name=csrfmiddlewaretoken]");
+        const driveLabelElements = Array.from(document.querySelectorAll("[data-drive-label]"));
+        const csrfInput = driveSelectForm ? driveSelectForm.querySelector('input[name="csrfmiddlewaretoken"]') : null;
 
-        let activeSearchInput = searchInputs.find(function (input) {
-            return input.value.trim();
-        }) || searchInputs[0] || null;
-        let currentPage = {{ page_number }};
-        let activeFilter = "{{ filter_type }}";
-        let lastRenderedVersion = {{ version }};
-        let lastRenderedQuery = getSearchQuery();
-        let lastRenderedPage = currentPage;
-        let lastRenderedFilter = activeFilter;
-        let refreshRequestController = null;
-        let refreshRequestSequence = 0;
-        let refreshRequestInFlight = false;
-        let scrollPageRequestController = null;
-        let scrollPageInFlight = false;
-        let scrollFramePending = false;
-        let scrollLoadedPage = currentPage;
-        let scrollNextPage = {{ has_next_page|yesno:"true,false" }} ? currentPage + 1 : null;
-        let scrollHasMore = {{ has_next_page|yesno:"true,false" }};
-        let activeAgentsRequestController = null;
-        let activeAgentsRequestSequence = 0;
-        let scrollLoadedStartDisplay = "{{ page_start_display|escapejs }}";
-        let scrollLoadedEndDisplay = "{{ page_end_display|escapejs }}";
-        let scrollTotalDisplay = "{{ total_matching_display|escapejs }}";
-        let scrollNextOffset = displayNumberToInteger(scrollLoadedEndDisplay);
-        let scrollPrefetchTimer = null;
-        let searchRefreshTimer = null;
-        let dashboardActionInFlight = false;
-        let dashboardActionSequence = 0;
-        const activeAgentOrder = new Map();
-        let idleLogoutTimer = null;
-        let lastActivityResetAt = 0;
-        let scanRequestInFlight = false;
-        let selectedAgentId = "{{ selected_agent_id|default:''|escapejs }}";
-
-        if (activeAgentsListElement) {
-            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button, index) {
-                activeAgentOrder.set(button.dataset.agentId || "", index);
-            });
-        }
-
-        function escapeHtml(value) {
-            return String(value)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
+        let activeFilter = "{{ filter_type|escapejs }}";
+        let currentPage = parseInt("{{ page_number|escapejs }}", 10) || 1;
+        let refreshTimer = null;
+        let activeAgentsTimer = null;
+        let isUserScrolling = false;
 
         function getSearchQuery() {
-            const input = activeSearchInput || searchInputs[0];
-            return input ? input.value.trim() : "";
-        }
-
-        function clearSearchInputs() {
-            window.clearTimeout(searchRefreshTimer);
-            searchInputs.forEach(function (input) {
-                input.value = "";
-            });
-            activeSearchInput = searchInputs[0] || null;
-        }
-
-        function currentDriveValue() {
-            return driveSelect ? driveSelect.value : "";
-        }
-
-        function appendDashboardSelectionParams(params) {
-            if (selectedAgentId) {
-                params.set("agent_id", selectedAgentId);
-            }
-
-            const selectedDriveValue = currentDriveValue();
-
-            if (selectedDriveValue) {
-                params.set("drive_root", selectedDriveValue);
-            }
-        }
-
-        function payloadSelectedAgentId(data) {
-            if (!data) {
-                return "";
-            }
-
-            if (Object.prototype.hasOwnProperty.call(data, "selected_agent_id")) {
-                return data.selected_agent_id || "";
-            }
-
-            if (data.dashboard && Object.prototype.hasOwnProperty.call(data.dashboard, "selected_agent_id")) {
-                return data.dashboard.selected_agent_id || "";
-            }
-
-            return "";
-        }
-
-        function payloadBelongsToCurrentSelection(data) {
-            const incomingAgentId = payloadSelectedAgentId(data);
-
-            return !selectedAgentId || incomingAgentId === selectedAgentId;
-        }
-
-        function syncProfileButtonState() {
-            if (profileToggle && profileMenu) {
-                profileToggle.setAttribute("aria-expanded", profileMenu.hidden ? "false" : "true");
-            }
-        }
-
-        function closeMenus(exceptMenu) {
-            document.querySelectorAll("[data-profile-menu], [data-filter-menu]").forEach(function (menu) {
-                if (menu !== exceptMenu) {
-                    menu.hidden = true;
-                }
-            });
-            syncProfileButtonState();
-        }
-
-        function toggleMenu(menu) {
-            if (!menu) {
-                return;
-            }
-
-            const shouldOpen = menu.hidden;
-            closeMenus(menu);
-            menu.hidden = !shouldOpen;
-            syncProfileButtonState();
-        }
-
-        function logoutAfterIdle() {
-            if (logoutForm) {
-                logoutForm.submit();
-            }
-        }
-
-        function resetIdleLogoutTimer() {
-            window.clearTimeout(idleLogoutTimer);
-            idleLogoutTimer = window.setTimeout(logoutAfterIdle, idleLogoutMs);
-        }
-
-        function registerUserActivity() {
-            const now = Date.now();
-
-            if (now - lastActivityResetAt < 500) {
-                return;
-            }
-
-            lastActivityResetAt = now;
-            resetIdleLogoutTimer();
-        }
-
-        function applyInitialDynamicStyles() {
-            if (progressFillElement) {
-                progressFillElement.style.width = `${progressFillElement.dataset.initialWidth || 0}%`;
-            }
-
-            if (storageFillElement) {
-                storageFillElement.style.width = `${storageFillElement.dataset.initialWidth || 0}%`;
-            }
-
-            if (donutElement) {
-                donutElement.style.background = `conic-gradient(${donutElement.dataset.initialGradient || "#e2e8f0 0deg 360deg"})`;
-            }
-        }
-
-        function updateFilterButtons() {
-            let activeFilterLabel = "All Files";
-
-            document.querySelectorAll("[data-filter-value]").forEach(function (button) {
-                const isActive = button.dataset.filterValue === activeFilter;
-                button.classList.toggle("active", isActive);
-
-                if (isActive) {
-                    activeFilterLabel = button.textContent.trim() || activeFilterLabel;
-                }
-            });
-
-            if (filterToggle) {
-                filterToggle.classList.toggle("active", activeFilter !== "all");
-            }
-
-            if (filterLabelElement) {
-                filterLabelElement.textContent = activeFilterLabel;
-            }
-        }
-
-        function updateDashboard(dashboard) {
-            if (!dashboard) {
-                return;
-            }
-
-            if (dashboard.dashboard_title) {
-                document.title = dashboard.dashboard_title;
-                dashboardTitleElements.forEach(function (element) {
-                    element.textContent = dashboard.dashboard_title;
-                });
-            }
-
-            if (dashboard.drive_initial) {
-                driveInitialElements.forEach(function (element) {
-                    element.textContent = dashboard.drive_initial;
-                });
-            }
-
-            if (dashboard.drive_label) {
-                driveLabelElements.forEach(function (element) {
-                    element.textContent = dashboard.drive_label;
-                });
-            }
-
-            totalFilesElements.forEach(function (element) {
-                element.textContent = dashboard.total_files_display;
-            });
-
-            processedFilesElements.forEach(function (element) {
-                element.textContent = dashboard.processed_files_display;
-            });
-
-            if (failedFilesElement) {
-                failedFilesElement.textContent = dashboard.failed_files_display;
-            }
-
-            if (currentFilesElement) {
-                currentFilesElement.textContent = `${dashboard.current_files_display} files`;
-            }
-
-            if (scanStatusTextElement) {
-                scanStatusTextElement.textContent = dashboard.sync_status_title;
-            }
-
-            if (progressFillElement) {
-                progressFillElement.style.width = `${dashboard.progress_percent}%`;
-            }
-
-            if (progressValueElement) {
-                progressValueElement.textContent = `${dashboard.progress_percent}%`;
-            }
-
-            if (donutElement) {
-                donutElement.style.background = `conic-gradient(${dashboard.distribution_gradient})`;
-            }
-
-            if (distributionListElement) {
-                distributionListElement.innerHTML = dashboard.distribution_items.map(function (item) {
-                    return `
-                        <li class="distribution-item">
-                            <span class="distribution-color distribution-${escapeHtml(item.key)}"></span>
-                            <span class="distribution-name">${escapeHtml(item.name)}</span>
-                            <span class="distribution-count">${escapeHtml(item.count_display)} (${escapeHtml(item.percent_display)}%)</span>
-                        </li>
-                    `;
-                }).join("");
-            }
-
-            if (storageFillElement) {
-                storageFillElement.style.width = `${dashboard.storage_info.percent_used}%`;
-            }
-
-            if (storageUsedElement) {
-                storageUsedElement.textContent = dashboard.storage_info.used_display;
-            }
-
-            if (storageTotalElement) {
-                storageTotalElement.textContent = dashboard.storage_info.total_display;
-            }
-
-            if (storageFreeElement) {
-                storageFreeElement.textContent = dashboard.storage_info.free_display;
-            }
-
-            if (storagePercentElement) {
-                storagePercentElement.textContent = `${dashboard.storage_info.percent_used}%`;
-            }
-
-            if (dashboard.system_info) {
-                if (systemHostElement) {
-                    systemHostElement.textContent = dashboard.system_info.host_name || "Unavailable";
-                }
-
-                if (systemIpElement) {
-                    systemIpElement.textContent = dashboard.system_info.ip_address || "Unavailable";
-                }
-
-                if (systemMacElement) {
-                    systemMacElement.textContent = dashboard.system_info.mac_address || "Unavailable";
-                }
-
-                if (systemOsElement) {
-                    systemOsElement.textContent = dashboard.system_info.os_label || "Unknown OS";
-                }
-
-                if (systemArchitectureElement) {
-                    systemArchitectureElement.textContent = dashboard.system_info.architecture || "Unknown architecture";
-                }
-            }
-
-            if (Array.isArray(dashboard.recent_activity)) {
-                renderRecentActivities(dashboard.recent_activity, dashboard.drive_label);
-            }
-        }
-
-        function renderRecentActivities(activities, driveLabel) {
-            const listEl = document.querySelector("[data-activity-list]");
-
-            if (!listEl) {
-                return;
-            }
-
-            if (!activities || !activities.length) {
-                listEl.innerHTML = `
-                    <div class="activity-empty" data-activity-empty>
-                        No recent file activity recorded on <span>${escapeHtml(driveLabel || "Drive")}</span> yet.
-                    </div>
-                `;
-                return;
-            }
-
-            listEl.innerHTML = activities.map(function (item) {
-                const badgeClass = item.badge_class || (item.tone ? `activity-badge-${item.tone}` : "activity-badge-info");
-                const typeLabel = item.type_label || item.title || "Change";
-                const fileName = item.file_name || item.title || "File";
-                const details = item.details || item.detail || "Activity recorded";
-                const timeDisplay = item.time_display || item.time || "Just now";
-                const timeAbsolute = item.time_absolute || "";
-
-                return `
-                    <div class="activity-item">
-                        <div class="activity-item-left">
-                            <span class="activity-badge ${escapeHtml(badgeClass)}">${escapeHtml(typeLabel)}</span>
-                            <div class="activity-details">
-                                <span class="activity-file-name" title="${escapeHtml(fileName)}">${escapeHtml(fileName)}</span>
-                                <span class="activity-meta">${escapeHtml(details)}</span>
-                            </div>
-                        </div>
-                        <span class="activity-time" title="${escapeHtml(timeAbsolute)}">${escapeHtml(timeDisplay)}</span>
-                    </div>
-                `;
-            }).join("");
-        }
-
-        function renderPagination(pagination) {
-            if (!pagination || !pageSummaryElement || !paginationControlsElement) {
-                return;
-            }
-
-            currentPage = pagination.page_number;
-            pageSummaryElement.textContent = `Showing ${pagination.page_start_display} to ${pagination.page_end_display} of ${pagination.total_matching_display} files`;
-
-            const buttons = pagination.pagination_pages.map(function (page) {
-                if (page === "ellipsis") {
-                    return `<span class="page-gap">...</span>`;
-                }
-
-                const activeClass = page === pagination.page_number ? " active" : "";
-                return `<button type="button" class="page-button${activeClass}" data-page="${page}">${page}</button>`;
-            }).join("");
-
-            paginationControlsElement.innerHTML = `
-                <button type="button" class="page-button" data-page-prev ${pagination.has_previous_page ? "" : "disabled"} aria-label="Previous page">
-                    <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m15 18-6-6 6-6"></path>
-                    </svg>
-                </button>
-                ${buttons}
-                <button type="button" class="page-button" data-page-next ${pagination.has_next_page ? "" : "disabled"} aria-label="Next page">
-                    <svg class="icon button-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="m9 18 6-6-6-6"></path>
-                    </svg>
-                </button>
-            `;
-        }
-
-        const prefetchingDrives = new Set();
-
-        function prefetchDrive(driveValue) {
-            if (!driveValue || prefetchingDrives.has(driveValue)) {
-                return;
-            }
-            const cached = getCachedPayload(selectedAgentId, driveValue, "all", 1, "");
-            if (cached) {
-                return;
-            }
-            prefetchingDrives.add(driveValue);
-
-            const params = new URLSearchParams();
-            appendDashboardSelectionParams(params);
-            params.set("drive_root", driveValue);
-            params.set("scope", "files");
-
-            fetch(`${dataUrl}?${params.toString()}`, {
-                headers: { "X-Requested-With": "XMLHttpRequest" }
-            }).then(function (res) {
-                return res.ok ? res.json() : null;
-            }).then(function (data) {
-                if (data && !data.unchanged) {
-                    setCachedPayload(selectedAgentId, driveValue, "all", 1, "", data);
-                }
-            }).catch(function () {}).finally(function () {
-                prefetchingDrives.delete(driveValue);
-            });
-        }
-
-        function prefetchOtherDrives(driveOptions) {
-            if (!Array.isArray(driveOptions)) {
-                return;
-            }
-            window.setTimeout(function () {
-                driveOptions.forEach(function (opt) {
-                    if (opt.value && opt.value !== currentDriveValue()) {
-                        prefetchDrive(opt.value);
-                    }
-                });
-            }, 60);
-        }
-
-        function renderDriveOptions(driveOptions, selectedDriveValue) {
-            if (!driveSelect || !Array.isArray(driveOptions)) {
-                return;
-            }
-
-            driveSelect.innerHTML = driveOptions.map(function (option) {
-                return `
-                    <option value="${escapeHtml(option.value)}" ${option.selected ? "selected" : ""}>
-                        ${escapeHtml(option.label)}
-                    </option>
-                `;
-            }).join("");
-
-            if (selectedDriveValue) {
-                driveSelect.value = selectedDriveValue;
-            }
-
-            prefetchOtherDrives(driveOptions);
-        }
-
-        function _formatNumber(val) {
-            return Number(val || 0).toLocaleString("en-US");
-        }
-
-        function updateVisibleScrollRange() {
-            if (!tableScrollElement || !rowsElement || !pageSummaryElement) {
-                return;
-            }
-            const totalRows = rowsElement.childElementCount;
-            if (!totalRows) {
-                return;
-            }
-
-            const firstRow = rowsElement.firstElementChild;
-            const rowHeight = (firstRow && firstRow.offsetHeight) ? firstRow.offsetHeight : 44;
-            const scrollTop = tableScrollElement.scrollTop;
-            const clientHeight = tableScrollElement.clientHeight;
-
-            const firstVisibleIndex = Math.max(1, Math.floor(scrollTop / rowHeight) + 1);
-            const lastVisibleIndex = Math.min(totalRows, Math.ceil((scrollTop + clientHeight) / rowHeight));
-
-            if (firstVisibleIndex > 0 && lastVisibleIndex >= firstVisibleIndex) {
-                const topDisplay = _formatNumber(firstVisibleIndex);
-                const bottomDisplay = _formatNumber(lastVisibleIndex);
-                const totalDisplay = scrollTotalDisplay || _formatNumber(totalRows);
-                const loadedDisplay = scrollLoadedEndDisplay || _formatNumber(totalRows);
-                pageSummaryElement.textContent = `Showing ${topDisplay}–${bottomDisplay} of ${totalDisplay} files (${loadedDisplay} loaded)`;
-            }
-        }
-
-        function updateScrollSummary() {
-            if (pageSummaryElement) {
-                updateVisibleScrollRange();
-            }
-        }
-
-        function displayNumberToInteger(value) {
-            const parsedValue = Number.parseInt(String(value || "0").replace(/,/g, ""), 10);
-
-            return Number.isNaN(parsedValue) ? 0 : parsedValue;
-        }
-
-        function resetScrollState(pagination, shouldResetPosition = true) {
-            if (!pagination) {
-                return;
-            }
-
-            scrollLoadedPage = pagination.page_number;
-            scrollLoadedStartDisplay = pagination.page_start_display;
-            scrollLoadedEndDisplay = pagination.page_end_display;
-            scrollTotalDisplay = pagination.total_matching_display;
-            scrollNextPage = pagination.has_next_page ? pagination.page_number + 1 : null;
-            scrollHasMore = pagination.has_next_page;
-            scrollNextOffset = displayNumberToInteger(pagination.page_end_display);
-            updateScrollSummary();
-
-            if (tableScrollElement && shouldResetPosition) {
-                tableScrollElement.scrollTo({
-                    top: 0,
-                    behavior: "auto",
-                });
-            }
-
-            window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
-            scheduleScrollPrefetch(90);
-        }
-
-        function updatePreservedScrollState(pagination) {
-            if (!pagination) {
-                return;
-            }
-
-            const loadedEnd = displayNumberToInteger(scrollLoadedEndDisplay);
-            const totalMatching = displayNumberToInteger(pagination.total_matching_display);
-
-            scrollTotalDisplay = pagination.total_matching_display;
-
-            if (totalMatching && loadedEnd > totalMatching) {
-                scrollLoadedEndDisplay = pagination.total_matching_display;
-                scrollNextOffset = totalMatching;
-                scrollHasMore = false;
-            } else if (totalMatching > loadedEnd) {
-                scrollNextOffset = loadedEnd;
-                scrollHasMore = true;
-            } else {
-                scrollNextOffset = loadedEnd;
-                scrollHasMore = false;
-            }
-
-            if (!scrollNextPage && pagination.total_pages > scrollLoadedPage) {
-                scrollNextPage = scrollLoadedPage + 1;
-            }
-
-            updateScrollSummary();
-        }
-
-        function fileScrollAwayFromTop() {
-            return Boolean(tableScrollElement && tableScrollElement.scrollTop > 8);
-        }
-
-        function fileScrollNearBottom() {
-            if (!tableScrollElement) {
-                return false;
-            }
-
-            const remainingDistance = tableScrollElement.scrollHeight
-                - tableScrollElement.scrollTop
-                - tableScrollElement.clientHeight;
-
-            // Proactively load another 10000 files in advance when user gets within 16 screen heights or 15000px of bottom
-            return remainingDistance < Math.max(15000, tableScrollElement.clientHeight * 16);
-        }
-
-        function fileScrollNeedsRows() {
-            return Boolean(
-                tableScrollElement
-                && scrollHasMore
-                && tableScrollElement.scrollHeight <= tableScrollElement.clientHeight + 4
-            );
-        }
-
-        function appendFilesPayload(data, currentQuery) {
-            if (!payloadBelongsToCurrentSelection(data) || !data.pagination) {
-                setRowsBusy(false);
-                return false;
-            }
-
-            if (data.rows_html) {
-                const existingEmptyState = rowsElement.querySelector(".empty-state");
-
-                if (existingEmptyState) {
-                    rowsElement.innerHTML = data.rows_html;
-                } else {
-                    rowsElement.insertAdjacentHTML("beforeend", data.rows_html);
-                }
-            }
-
-            if (data.scroll) {
-                scrollLoadedEndDisplay = data.scroll.end_display;
-                scrollTotalDisplay = data.scroll.total_display;
-                scrollNextOffset = data.scroll.next_offset || displayNumberToInteger(data.scroll.end_display);
-                scrollHasMore = Boolean(data.scroll.has_more);
-            } else {
-                scrollLoadedEndDisplay = data.pagination.page_end_display;
-                scrollTotalDisplay = data.pagination.total_matching_display;
-                scrollLoadedPage = data.pagination.page_number;
-                scrollNextPage = data.pagination.has_next_page
-                    ? data.pagination.page_number + 1
-                    : null;
-                scrollNextOffset = displayNumberToInteger(data.pagination.page_end_display);
-                scrollHasMore = data.pagination.has_next_page;
-            }
-
-            updateScrollSummary();
-
-            if (!data.dashboard && data.current_files_display && currentFilesElement) {
-                currentFilesElement.textContent = `${data.current_files_display} files`;
-            }
-
-            lastRenderedVersion = data.version;
-            lastRenderedQuery = currentQuery;
-            lastRenderedFilter = activeFilter;
-
-            if (scrollHasMore && fileScrollNearBottom()) {
-                scheduleScrollPrefetch(0);
-            }
-
-            return true;
-        }
-
-        function scheduleScrollPrefetch(delayMs = 0) {
-            window.clearTimeout(scrollPrefetchTimer);
-
-            if (!scrollHasMore || scrollPageInFlight || dashboardActionInFlight) {
-                return;
-            }
-
-            scrollPrefetchTimer = window.setTimeout(function () {
-                loadNextScrollPage({
-                    prefetch: true,
-                });
-            }, delayMs);
-        }
-
-        function abortPassiveRefreshForScroll() {
-            if (refreshRequestController) {
-                refreshRequestController.abort();
-                refreshRequestController = null;
-                refreshRequestInFlight = false;
-            }
-        }
-
-        async function loadNextScrollPage(options = {}) {
-            if (!scrollHasMore || scrollPageInFlight || dashboardActionInFlight) {
-                return;
-            }
-
-            abortPassiveRefreshForScroll();
-
-            const currentQuery = getSearchQuery();
-            const requestedFilter = activeFilter;
-            const requestedAgentId = selectedAgentId;
-            const requestedDriveValue = currentDriveValue();
-            const requestedOffset = scrollNextOffset;
-            const params = new URLSearchParams();
-            appendDashboardSelectionParams(params);
-            params.set("scope", "files");
-            params.set("offset", requestedOffset);
-            params.set("limit", scrollBatchSize);
-
-            if (currentQuery) {
-                params.set("search", currentQuery);
-            }
-
-            if (activeFilter !== "all") {
-                params.set("type", activeFilter);
-            }
-
-            const requestUrl = `${dataUrl}?${params.toString()}`;
-            scrollPageRequestController = new AbortController();
-            scrollPageInFlight = true;
-
-            if (tableScrollElement && !options.prefetch) {
-                tableScrollElement.classList.add("loading-more");
-            }
-
-            try {
-                const response = await fetch(requestUrl, {
-                    signal: scrollPageRequestController.signal,
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                });
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                if (
-                    !data.unchanged
-                    && currentQuery === getSearchQuery()
-                    && requestedFilter === activeFilter
-                    && requestedAgentId === selectedAgentId
-                    && requestedDriveValue === currentDriveValue()
-                    && requestedOffset === scrollNextOffset
-                ) {
-                    appendFilesPayload(data, currentQuery);
-                }
-            } catch (error) {
-                if (error.name !== "AbortError") {
-                    console.error("Unable to load more files.", error);
-                }
-            } finally {
-                scrollPageInFlight = false;
-                scrollPageRequestController = null;
-
-                if (tableScrollElement) {
-                    tableScrollElement.classList.remove("loading-more");
-                }
-
-                window.setTimeout(function () {
-                    if (fileScrollNeedsRows() || fileScrollNearBottom()) {
-                        loadNextScrollPage({ prefetch: true });
-                    }
-                }, 0);
-            }
-        }
-
-        function loadNextPageIfScrollNeedsRows() {
-            if (fileScrollNeedsRows() || fileScrollNearBottom()) {
-                loadNextScrollPage({ prefetch: true });
-            }
-        }
-
-        function handleFileScroll() {
-            if (scrollFramePending) {
-                return;
-            }
-
-            scrollFramePending = true;
-
-            window.requestAnimationFrame(function () {
-                scrollFramePending = false;
-                updateVisibleScrollRange();
-
-                if (fileScrollNearBottom() || scrollHasMore) {
-                    loadNextScrollPage({ prefetch: true });
-                }
-            });
-        }
-
-        function cancelRefreshRequest() {
-            window.clearTimeout(searchRefreshTimer);
-            window.clearTimeout(scrollPrefetchTimer);
-
-            if (refreshRequestController) {
-                refreshRequestController.abort();
-                refreshRequestController = null;
-            }
-
-            if (scrollPageRequestController) {
-                scrollPageRequestController.abort();
-                scrollPageRequestController = null;
-            }
-
-            refreshRequestSequence += 1;
-            refreshRequestInFlight = false;
-            scrollPageInFlight = false;
-        }
-
-        function cancelActiveAgentsRequest() {
-            if (activeAgentsRequestController) {
-                activeAgentsRequestController.abort();
-                activeAgentsRequestController = null;
-            }
-
-            activeAgentsRequestSequence += 1;
-        }
-
-        function updateActiveAgentSelection() {
-            if (!activeAgentsListElement) {
-                return;
-            }
-
-            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button) {
-                button.classList.toggle("selected", button.dataset.agentId === selectedAgentId);
-            });
-        }
-
-        function setRowsBusy(isBusy) {
-            if (rowsElement) {
-                rowsElement.toggleAttribute("aria-busy", Boolean(isBusy));
-            }
-        }
-
-        function updateActiveAgentButton(button, agent) {
-            const subtitle = `${agent.drive_count || 0} drives | ${agent.total_files_display || "0"} files`;
-            button.type = "button";
-            button.className = `sidebar-user-button${agent.agent_id === selectedAgentId ? " selected" : ""}${agent.is_online === false ? " offline" : ""}`;
-            button.dataset.agentId = agent.agent_id || "";
-            button.title = `${agent.ip_address || "Unavailable"} | ${agent.mac_address || "Unavailable"}`;
-
-            let dot = button.querySelector(".sidebar-user-dot");
-
-            if (!dot) {
-                dot = document.createElement("span");
-                dot.className = "sidebar-user-dot";
-                button.appendChild(dot);
-            }
-
-            let textWrap = button.querySelector(".sidebar-user-text");
-
-            if (!textWrap) {
-                textWrap = document.createElement("span");
-                textWrap.className = "sidebar-user-text";
-                button.appendChild(textWrap);
-            }
-
-            let nameElement = textWrap.querySelector(".sidebar-user-name");
-
-            if (!nameElement) {
-                nameElement = document.createElement("span");
-                nameElement.className = "sidebar-user-name";
-                textWrap.appendChild(nameElement);
-            }
-
-            let metaElement = textWrap.querySelector(".sidebar-user-meta");
-
-            if (!metaElement) {
-                metaElement = document.createElement("span");
-                metaElement.className = "sidebar-user-meta";
-                textWrap.appendChild(metaElement);
-            }
-
-            nameElement.textContent = agent.host_name || "Unknown PC";
-            metaElement.textContent = subtitle;
-        }
-
-        function renderActiveAgents(data) {
-            if (!data || !activeAgentsListElement) {
-                return;
-            }
-
-            const agents = Array.isArray(data.agents) ? data.agents.slice() : (data.active_agents || []).slice();
-            const previousSelectedAgentId = selectedAgentId;
-
-            if (data.selected_agent_removed && previousSelectedAgentId) {
-                selectedAgentId = "";
-                updateActiveAgentSelection();
-
-                window.setTimeout(function () {
-                    selectAgent("");
-                }, 0);
-            }
-
-            if (activeAgentsOnlineElement) {
-                activeAgentsOnlineElement.textContent = data.total_agents ?? data.active_agents_total ?? agents.length;
-            }
-
-            if (!agents.length) {
-                activeAgentsListElement.innerHTML = "";
-
-                if (activeAgentsEmptyElement) {
-                    activeAgentsEmptyElement.hidden = false;
-                    activeAgentsListElement.hidden = true;
-                }
-
-                return;
-            }
-
-            if (activeAgentsEmptyElement) {
-                activeAgentsEmptyElement.hidden = true;
-            }
-
-            activeAgentsListElement.hidden = false;
-
-            agents.forEach(function (agent) {
-                const agentId = agent.agent_id || "";
-
-                if (agentId && !activeAgentOrder.has(agentId)) {
-                    activeAgentOrder.set(agentId, activeAgentOrder.size);
-                }
-            });
-
-            agents.sort(function (firstAgent, secondAgent) {
-                const firstOrder = activeAgentOrder.get(firstAgent.agent_id || "") ?? Number.MAX_SAFE_INTEGER;
-                const secondOrder = activeAgentOrder.get(secondAgent.agent_id || "") ?? Number.MAX_SAFE_INTEGER;
-
-                if (firstOrder !== secondOrder) {
-                    return firstOrder - secondOrder;
-                }
-
-                return String(firstAgent.host_name || "").localeCompare(String(secondAgent.host_name || ""));
-            });
-
-            const visibleAgentIds = new Set(agents.map(function (agent) {
-                return agent.agent_id || "";
-            }));
-
-            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button) {
-                if (!visibleAgentIds.has(button.dataset.agentId || "")) {
-                    button.remove();
-                }
-            });
-
-            const existingButtons = new Map();
-
-            activeAgentsListElement.querySelectorAll("[data-agent-id]").forEach(function (button) {
-                existingButtons.set(button.dataset.agentId || "", button);
-            });
-
-            agents.forEach(function (agent) {
-                const agentId = agent.agent_id || "";
-                let button = existingButtons.get(agentId);
-
-                if (!button) {
-                    button = document.createElement("button");
-                }
-
-                updateActiveAgentButton(button, agent);
-                activeAgentsListElement.appendChild(button);
-            });
-        }
-
-        const clientPayloadCache = new Map();
-        const MAX_CLIENT_CACHE_ENTRIES = 64;
-
-        function getClientCacheKey(agentId, driveValue, filter, page, searchQuery) {
-            const agentKey = String(agentId || "local").trim();
-            const driveKey = String(driveValue || "").trim();
-            const filterKey = String(filter || "all").trim().toLowerCase();
-            const pageKey = String(page || 1).trim();
-            const searchKey = String(searchQuery || "").trim().toLowerCase();
-            return `${agentKey}:${driveKey}:${filterKey}:${pageKey}:${searchKey}`;
-        }
-
-        function setCachedPayload(agentId, driveValue, filter, page, searchQuery, data) {
-            if (!data || data.unchanged) return;
-            const key = getClientCacheKey(agentId, driveValue, filter, page, searchQuery);
-            clientPayloadCache.set(key, {
-                timestamp: Date.now(),
-                data: data,
-            });
-            if (clientPayloadCache.size > MAX_CLIENT_CACHE_ENTRIES) {
-                const oldestKey = clientPayloadCache.keys().next().value;
-                clientPayloadCache.delete(oldestKey);
-            }
-        }
-
-        function getCachedPayload(agentId, driveValue, filter, page, searchQuery) {
-            const key = getClientCacheKey(agentId, driveValue, filter, page, searchQuery);
-            const entry = clientPayloadCache.get(key);
-            if (!entry) return null;
-            if (Date.now() - entry.timestamp > 30000) {
-                clientPayloadCache.delete(key);
-                return null;
-            }
-            return entry.data;
-        }
-
-        function applyFilesPayload(data, currentQuery, options = {}) {
-            if (!payloadBelongsToCurrentSelection(data)) {
-                setRowsBusy(false);
-                return false;
-            }
-
-            const preserveRows = Boolean(options.preserveRows);
-            selectedAgentId = data.selected_agent_id ?? data.dashboard?.selected_agent_id ?? selectedAgentId;
-
-            if (!data.unchanged && data.rows_html) {
-                setCachedPayload(
-                    selectedAgentId,
-                    data.selected_drive_value || currentDriveValue(),
-                    activeFilter,
-                    currentPage,
-                    currentQuery,
-                    data
-                );
-            }
-
-            if (!preserveRows) {
-                rowsElement.innerHTML = data.rows_html;
-            }
-
-            setRowsBusy(false);
-            errorElement.textContent = data.error_message || "";
-            errorElement.hidden = !data.error_message;
-            updateDashboard(data.dashboard);
-
-            if (!data.dashboard && data.current_files_display && currentFilesElement) {
-                currentFilesElement.textContent = `${data.current_files_display} files`;
-            }
-
-            if (preserveRows) {
-                updatePreservedScrollState(data.pagination);
-            } else {
-                renderPagination(data.pagination);
-                resetScrollState(data.pagination);
-            }
-
-            renderDriveOptions(data.drive_options, data.selected_drive_value);
-
-            if (
-                Object.prototype.hasOwnProperty.call(data, "active_agents")
-                || Object.prototype.hasOwnProperty.call(data, "agents")
-            ) {
-                renderActiveAgents(data);
-            }
-
-            updateFilterButtons();
-            lastRenderedVersion = data.version;
-            lastRenderedQuery = currentQuery;
-            lastRenderedPage = currentPage;
-            lastRenderedFilter = activeFilter;
-            return true;
-        }
-
-        function scheduleFilesOnlyRefresh(delayMs = 90) {
-            window.clearTimeout(searchRefreshTimer);
-            searchRefreshTimer = window.setTimeout(function () {
-                refreshFiles({
-                    filesOnly: true,
-                    force: true,
-                });
-            }, delayMs);
-        }
-
-        function resetFileListingForSearch() {
-            currentPage = 1;
-            lastRenderedVersion = null;
-            lastRenderedQuery = "";
-            lastRenderedPage = 1;
-            lastRenderedFilter = activeFilter;
-            scrollLoadedPage = 1;
-            scrollNextPage = null;
-            scrollNextOffset = 0;
-            scrollHasMore = false;
-        }
-
-        async function selectAgent(agentId) {
-            resetIdleLogoutTimer();
-            closeMenus();
-            clearSearchInputs();
-            cancelRefreshRequest();
-            cancelActiveAgentsRequest();
-            const previousSelectedAgentId = selectedAgentId;
-            activeFilter = "all";
-            currentPage = 1;
-            lastRenderedVersion = null;
-            lastRenderedQuery = "";
-            lastRenderedPage = 1;
-            lastRenderedFilter = activeFilter;
-            selectedAgentId = agentId || "";
-            updateFilterButtons();
-            updateActiveAgentSelection();
-
-            // INSTANT UI RESPONSE: Serve cached payload immediately for 0ms latency
-            const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, currentPage, getSearchQuery());
-            if (cachedPayload) {
-                applyFilesPayload(cachedPayload, "");
-            } else {
-                setRowsBusy(true);
-            }
-
-            dashboardActionInFlight = true;
-            const actionSequence = ++dashboardActionSequence;
-
-            const formData = new FormData();
-            formData.set("agent_id", selectedAgentId);
-
-            if (scanStatusTextElement && !cachedPayload) {
-                scanStatusTextElement.textContent = selectedAgentId ? "Loading User" : "Loading Dashboard";
-            }
-
-            try {
-                const response = await fetch(selectAgentUrl, {
-                    method: "POST",
-                    body: formData,
-                    headers: {
-                        "X-CSRFToken": csrfInput ? csrfInput.value : "",
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                });
-
-                if (!response.ok) {
-                    if (actionSequence !== dashboardActionSequence) {
-                        return;
-                    }
-
-                    if (!cachedPayload) {
-                        selectedAgentId = previousSelectedAgentId;
-                        updateActiveAgentSelection();
-                        setRowsBusy(false);
-                    }
-                    refreshActiveAgents();
-                    return;
-                }
-
-                if (actionSequence !== dashboardActionSequence) {
-                    return;
-                }
-
-                const data = await response.json();
-                applyFilesPayload(data, "");
-            } catch (error) {
-                if (actionSequence !== dashboardActionSequence) {
-                    return;
-                }
-
-                if (!cachedPayload) {
-                    selectedAgentId = previousSelectedAgentId;
-                    updateActiveAgentSelection();
-                    setRowsBusy(false);
-                }
-                console.error("Unable to select DriveAgent user.", error);
-            } finally {
-                if (actionSequence === dashboardActionSequence) {
-                    dashboardActionInFlight = false;
-                }
-            }
-        }
-
-        async function refreshFiles(options = {}) {
-            const isPriorityRefresh = Boolean(options.force);
-            const filesOnly = Boolean(options.filesOnly);
-
-            if (dashboardActionInFlight && !isPriorityRefresh) {
-                return;
-            }
-
-            if (scrollPageInFlight && !isPriorityRefresh) {
-                return;
-            }
-
-            if (refreshRequestInFlight && !isPriorityRefresh) {
-                return;
-            }
-
-            const currentQuery = getSearchQuery();
-            const params = new URLSearchParams();
-            appendDashboardSelectionParams(params);
-
-            if (filesOnly) {
-                params.set("scope", "files");
-            }
-
-            if (currentQuery) {
-                params.set("search", currentQuery);
-            }
-
-            if (activeFilter !== "all") {
-                params.set("type", activeFilter);
-            }
-
-            if (currentPage > 1) {
-                params.set("page", currentPage);
-            }
-
-            if (
-                !options.force
-                && currentQuery === lastRenderedQuery
-                && currentPage === lastRenderedPage
-                && activeFilter === lastRenderedFilter
-                && lastRenderedVersion !== null
-            ) {
-                params.set("version", lastRenderedVersion);
-                params.set("unchanged_ok", "1");
-            }
-
-            const requestUrl = params.toString()
-                ? `${dataUrl}?${params.toString()}`
-                : dataUrl;
-            let requestSequence = 0;
-
-            try {
-                if (scrollPageRequestController && isPriorityRefresh) {
-                    scrollPageRequestController.abort();
-                    scrollPageRequestController = null;
-                    scrollPageInFlight = false;
-                }
-
-                if (refreshRequestController && isPriorityRefresh) {
-                    refreshRequestController.abort();
-                } else if (refreshRequestController) {
-                    return;
-                }
-
-                requestSequence = ++refreshRequestSequence;
-                refreshRequestController = new AbortController();
-                refreshRequestInFlight = true;
-                setRowsBusy(isPriorityRefresh);
-
-                const response = await fetch(requestUrl, {
-                    signal: refreshRequestController.signal,
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                });
-
-                if (!response.ok) {
-                    setRowsBusy(false);
-                    return;
-                }
-
-                const data = await response.json();
-
-                if (requestSequence !== refreshRequestSequence) {
-                    return;
-                }
-
-                if (data.unchanged) {
-                    setRowsBusy(false);
-                    errorElement.textContent = data.error_message || "";
-                    errorElement.hidden = !data.error_message;
-                    return;
-                }
-
-                if (scanStatusTextElement) {
-                    scanStatusTextElement.textContent = data.sync_status_title || (
-                        data.is_scanning ? "Sync Running" : "Sync Complete"
-                    );
-                }
-
-                applyFilesPayload(data, currentQuery, {
-                    preserveRows: !isPriorityRefresh && (
-                        fileScrollAwayFromTop()
-                        || scrollLoadedPage > currentPage
-                    ),
-                });
-            } catch (error) {
-                if (error.name === "AbortError") {
-                    setRowsBusy(false);
-                    return;
-                }
-
-                setRowsBusy(false);
-                console.error("Unable to refresh files.", error);
-            } finally {
-                if (requestSequence && requestSequence === refreshRequestSequence) {
-                    refreshRequestController = null;
-                    refreshRequestInFlight = false;
-                }
-            }
+            return searchInputs.length ? searchInputs[0].value.trim() : "";
         }
 
         async function switchDrive() {
-            if (!driveSelect || !driveSelectForm) {
-                return;
-            }
-
-            resetIdleLogoutTimer();
-            closeMenus();
-            clearSearchInputs();
-            cancelRefreshRequest();
-            activeFilter = "all";
-            currentPage = 1;
-            lastRenderedVersion = null;
-            lastRenderedQuery = "";
-            lastRenderedPage = 1;
-            lastRenderedFilter = activeFilter;
-            updateFilterButtons();
-
+            if (!driveSelectForm || !driveSelect) return;
             const selectedDriveValue = driveSelect.value;
-            const selectedOption = driveSelect.options[driveSelect.selectedIndex];
-            const driveLabelText = selectedOption ? selectedOption.textContent.trim() : selectedDriveValue;
-
-            driveLabelElements.forEach(function (element) {
-                element.textContent = driveLabelText;
-            });
-
             const formData = new FormData(driveSelectForm);
             formData.set(driveSelect.name, selectedDriveValue);
-
-            if (selectedAgentId) {
-                formData.set("agent_id", selectedAgentId);
-            }
-
-            if (refreshRequestController) {
-                refreshRequestController.abort();
-                refreshRequestController = null;
-            }
-
-            // INSTANT UI RESPONSE: Try cached payload for instant drive switch!
-            const cachedPayload = getCachedPayload(selectedAgentId, selectedDriveValue, activeFilter, currentPage, getSearchQuery());
-            if (cachedPayload) {
-                applyFilesPayload(cachedPayload, "");
-            } else {
-                setRowsBusy(true);
-            }
-
-            dashboardActionInFlight = true;
-            const actionSequence = ++dashboardActionSequence;
-
-            if (scanStatusTextElement && !cachedPayload) {
-                scanStatusTextElement.textContent = "Switching Drive";
-            }
 
             try {
                 const response = await fetch(driveSelectForm.action, {
@@ -1838,363 +303,22 @@
                         "X-Requested-With": "XMLHttpRequest",
                     },
                 });
-
-                if (!response.ok) {
-                    if (actionSequence !== dashboardActionSequence) {
-                        return;
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.rows_html && rowsElement) {
+                        rowsElement.innerHTML = data.rows_html;
                     }
-
-                    if (!cachedPayload) {
-                        driveSelectForm.submit();
-                    }
-                    return;
                 }
-
-                const data = await response.json();
-                if (actionSequence !== dashboardActionSequence) {
-                    return;
-                }
-
-                applyFilesPayload(data, "");
             } catch (error) {
-                if (actionSequence !== dashboardActionSequence) {
-                    return;
-                }
-
                 console.error("Unable to switch drive.", error);
-                if (!cachedPayload) {
-                    driveSelectForm.submit();
-                }
-            } finally {
-                if (actionSequence === dashboardActionSequence) {
-                    driveSelect.disabled = false;
-                    dashboardActionInFlight = false;
-                }
             }
         }
 
-        async function requestScan() {
-            if (scanRequestInFlight) {
-                return;
-            }
-
-            scanRequestInFlight = true;
-            document.querySelectorAll("[data-pull-files]").forEach(function (button) {
-                button.disabled = true;
-            });
-
-            if (scanStatusTextElement) {
-                scanStatusTextElement.textContent = "Sync Running";
-            }
-
-            const formData = new FormData();
-
-            if (selectedAgentId) {
-                formData.set("agent_id", selectedAgentId);
-            }
-
-            const selectedDriveValue = currentDriveValue();
-
-            if (selectedDriveValue) {
-                formData.set("drive_root", selectedDriveValue);
-            }
-
-            try {
-                await fetch(scanUrl, {
-                    method: "POST",
-                    body: formData,
-                    headers: {
-                        "X-CSRFToken": csrfInput ? csrfInput.value : "",
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                });
-
-                currentPage = 1;
-                await refreshFiles({ force: true });
-            } catch (error) {
-                console.error("Unable to request scan.", error);
-            } finally {
-                scanRequestInFlight = false;
-                document.querySelectorAll("[data-pull-files]").forEach(function (button) {
-                    button.disabled = false;
-                });
-            }
-        }
-
-        async function refreshActiveAgents() {
-            if (!activeAgentsListElement) {
-                return;
-            }
-
-            if (dashboardActionInFlight) {
-                return;
-            }
-
-            if (activeAgentsRequestController) {
-                return;
-            }
-
-            let requestSequence = 0;
-
-            try {
-                const params = new URLSearchParams();
-                const requestedSelectedAgentId = selectedAgentId;
-                requestSequence = ++activeAgentsRequestSequence;
-
-                if (requestedSelectedAgentId) {
-                    params.set("agent_id", requestedSelectedAgentId);
-                }
-
-                const requestUrl = params.toString()
-                    ? `${activeAgentsUrl}?${params.toString()}`
-                    : activeAgentsUrl;
-                activeAgentsRequestController = new AbortController();
-                const requestController = activeAgentsRequestController;
-                const response = await fetch(requestUrl, {
-                    signal: requestController.signal,
-                    headers: {
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                });
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                if (
-                    requestSequence !== activeAgentsRequestSequence
-                    || requestedSelectedAgentId !== selectedAgentId
-                ) {
-                    return;
-                }
-
-                renderActiveAgents(data);
-            } catch (error) {
-                if (error.name === "AbortError") {
-                    return;
-                }
-
-                console.error("Unable to refresh active users.", error);
-            } finally {
-                if (requestSequence === activeAgentsRequestSequence) {
-                    activeAgentsRequestController = null;
-                }
-            }
-        }
-
-        searchInputs.forEach(function (input) {
-            input.addEventListener("input", function () {
-                activeSearchInput = input;
-                resetFileListingForSearch();
-                cancelRefreshRequest();
-                const query = getSearchQuery();
-
-                // Check instant cache if query exists
-                const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, 1, query);
-                if (cachedPayload) {
-                    applyFilesPayload(cachedPayload, query);
-                } else {
-                    setRowsBusy(true);
-                }
-
-                scheduleFilesOnlyRefresh(120);
-            });
-        });
-
-        searchForms.forEach(function (form) {
-            form.addEventListener("submit", function (event) {
-                event.preventDefault();
-                activeSearchInput = form.querySelector("[data-search-input]") || activeSearchInput;
-                resetFileListingForSearch();
-                resetIdleLogoutTimer();
-                window.clearTimeout(searchRefreshTimer);
-                refreshFiles({
-                    filesOnly: true,
-                    force: true,
-                });
-            });
-        });
-
-        document.addEventListener("keydown", function (event) {
-            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-                event.preventDefault();
-                if (searchInputs[0]) {
-                    activeSearchInput = searchInputs[0];
-                    searchInputs[0].focus();
-                    searchInputs[0].select();
-                }
-            }
-        });
-
-        document.querySelectorAll("[data-pull-files]").forEach(function (button) {
-            button.addEventListener("click", function () {
-                resetIdleLogoutTimer();
-                requestScan();
-            });
-        });
-
-        if (localDashboardLink) {
-            localDashboardLink.addEventListener("click", function (event) {
-                event.preventDefault();
-                selectAgent("");
-            });
-        }
-
-        if (activeAgentsListElement) {
-            activeAgentsListElement.addEventListener("click", function (event) {
-                const card = event.target.closest("[data-agent-id]");
-
-                if (!card) {
-                    return;
-                }
-
-                selectAgent(card.dataset.agentId || "");
-            });
-
-            activeAgentsListElement.addEventListener("keydown", function (event) {
-                if (event.key !== "Enter" && event.key !== " ") {
-                    return;
-                }
-
-                const card = event.target.closest("[data-agent-id]");
-
-                if (!card) {
-                    return;
-                }
-
-                event.preventDefault();
-                selectAgent(card.dataset.agentId || "");
-            });
-        }
-
-        if (driveSelect && driveSelectForm) {
-            ["pointerdown", "focus", "mouseenter"].forEach(function (eventName) {
-                driveSelect.addEventListener(eventName, function () {
-                    Array.from(driveSelect.options).forEach(function (opt) {
-                        if (opt.value && opt.value !== currentDriveValue()) {
-                            prefetchDrive(opt.value);
-                        }
-                    });
-                }, { passive: true });
-            });
-
-            driveSelectForm.addEventListener("submit", function (event) {
-                event.preventDefault();
-                switchDrive();
-            });
-
+        if (driveSelect) {
             driveSelect.addEventListener("change", function () {
                 switchDrive();
             });
         }
-
-        if (paginationControlsElement) {
-            paginationControlsElement.addEventListener("click", function (event) {
-                const pageButton = event.target.closest("[data-page]");
-                const previousButton = event.target.closest("[data-page-prev]");
-                const nextButton = event.target.closest("[data-page-next]");
-
-                if (pageButton) {
-                    currentPage = Number(pageButton.dataset.page);
-                } else if (previousButton && !previousButton.disabled) {
-                    currentPage = Math.max(1, currentPage - 1);
-                } else if (nextButton && !nextButton.disabled) {
-                    currentPage += 1;
-                } else {
-                    return;
-                }
-
-                resetIdleLogoutTimer();
-
-                // INSTANT UI RESPONSE: Check cache for instant pagination!
-                const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, currentPage, getSearchQuery());
-                if (cachedPayload) {
-                    applyFilesPayload(cachedPayload, getSearchQuery());
-                }
-
-                refreshFiles({
-                    filesOnly: true,
-                    force: true,
-                });
-            });
-        }
-
-        if (tableScrollElement) {
-            tableScrollElement.addEventListener("scroll", handleFileScroll, {
-                passive: true,
-            });
-        }
-
-        if (filterToggle) {
-            filterToggle.addEventListener("click", function () {
-                toggleMenu(filterMenu);
-                resetIdleLogoutTimer();
-            });
-        }
-
-        document.querySelectorAll("[data-filter-value]").forEach(function (button) {
-            button.addEventListener("click", function () {
-                activeFilter = button.dataset.filterValue;
-                currentPage = 1;
-                closeMenus();
-                resetIdleLogoutTimer();
-                updateFilterButtons();
-
-                // INSTANT UI RESPONSE: Serve cached payload immediately for filter!
-                const cachedPayload = getCachedPayload(selectedAgentId, currentDriveValue(), activeFilter, currentPage, getSearchQuery());
-                if (cachedPayload) {
-                    applyFilesPayload(cachedPayload, getSearchQuery());
-                }
-
-                refreshFiles({
-                    filesOnly: true,
-                    force: true,
-                });
-            });
-        });
-
-        if (profileToggle) {
-            profileToggle.addEventListener("click", function () {
-                toggleMenu(profileMenu);
-                resetIdleLogoutTimer();
-            });
-        }
-
-        document.addEventListener("click", function (event) {
-            if (!event.target.closest(".utility-group") && !event.target.closest(".panel-tools")) {
-                closeMenus();
-            }
-        });
-
-        [
-            "change",
-            "click",
-            "input",
-            "keydown",
-            "mousemove",
-            "pointerdown",
-            "pointermove",
-            "scroll",
-            "touchstart",
-            "wheel",
-        ].forEach(function (eventName) {
-            window.addEventListener(eventName, registerUserActivity, {
-                passive: true,
-            });
-        });
-
-        resetIdleLogoutTimer();
-        applyInitialDynamicStyles();
-        updateFilterButtons();
-        window.setTimeout(loadNextPageIfScrollNeedsRows, 0);
-        window.setInterval(function () {
-            refreshFiles({
-                filesOnly: Boolean(getSearchQuery() || activeFilter !== "all" || currentPage > 1),
-            });
-        }, refreshIntervalMs);
-        window.setInterval(refreshActiveAgents, activeAgentsRefreshIntervalMs);
     })();
 </script>
 
