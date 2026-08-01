@@ -529,7 +529,7 @@ def log_local_scan_activities(added_files, renamed_files, deleted_files, drive_r
         )
 
 
-def _build_recent_activities(drive_report=None, agent=None, limit=100, hours=48):
+def _build_recent_activities(drive_report=None, agent=None, drive_root=None, limit=100, hours=48):
     cutoff_time = timezone.now() - timedelta(hours=hours)
     try:
         DriveActivityLog.objects.filter(timestamp__lt=cutoff_time).delete()
@@ -540,6 +540,10 @@ def _build_recent_activities(drive_report=None, agent=None, limit=100, hours=48)
 
     if drive_report:
         queryset = queryset.filter(drive=drive_report)
+    elif drive_root:
+        _, local_drive = _get_or_create_local_agent_and_drive(drive_root)
+        if local_drive:
+            queryset = queryset.filter(drive=local_drive)
     elif agent:
         queryset = queryset.filter(agent=agent)
 
@@ -1371,7 +1375,7 @@ def _build_dashboard_summary(all_snapshot, current_snapshot, drive_root):
         "storage_info": _get_storage_info(drive_root),
         "distribution_items": type_distribution["items"],
         "distribution_gradient": type_distribution["gradient"],
-        "recent_activity": _build_recent_activities(),
+        "recent_activity": _build_recent_activities(drive_root=drive_root),
     }
 
 
