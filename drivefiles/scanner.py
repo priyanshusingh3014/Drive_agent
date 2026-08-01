@@ -541,16 +541,31 @@ def _process_local_scan_activities(new_files, drive_root):
 
     for rem_k in removed_keys:
         old_f = old_map[rem_k]
+        old_name_lower = old_f.get("name", "").lower()
+        is_temp_new_file = (
+            old_name_lower.startswith("new ")
+            or old_name_lower.startswith("new_")
+            or old_name_lower == "new"
+        )
+
         for add_k in added_keys:
             if add_k in matched_added:
                 continue
             new_f = new_map[add_k]
             if old_f.get("folder") == new_f.get("folder") and old_f.get("size_bytes") == new_f.get("size_bytes"):
-                renamed_files.append({
-                    "file_name": new_f["name"],
-                    "old_name": old_f["name"],
-                    "folder": new_f.get("folder") or "Root",
-                })
+                if is_temp_new_file:
+                    added_files.append({
+                        "file_name": new_f["name"],
+                        "folder": new_f.get("folder") or "Root",
+                        "is_temp_rename": True,
+                        "temp_old_name": old_f["name"],
+                    })
+                else:
+                    renamed_files.append({
+                        "file_name": new_f["name"],
+                        "old_name": old_f["name"],
+                        "folder": new_f.get("folder") or "Root",
+                    })
                 matched_removed.add(rem_k)
                 matched_added.add(add_k)
                 break

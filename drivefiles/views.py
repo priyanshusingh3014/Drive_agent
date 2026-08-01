@@ -520,6 +520,21 @@ def log_local_scan_activities(added_files, renamed_files, deleted_files, drive_r
         )
 
     for item in added_files:
+        temp_old_name = item.get("temp_old_name")
+        if temp_old_name:
+            five_mins_ago = timezone.now() - timedelta(minutes=5)
+            existing_log = DriveActivityLog.objects.filter(
+                drive=drive,
+                file_name=temp_old_name,
+                timestamp__gte=five_mins_ago,
+            ).first()
+
+            if existing_log:
+                existing_log.file_name = item["file_name"]
+                existing_log.details = f"File added in {item.get('folder', 'Root')}"
+                existing_log.save()
+                continue
+
         _log_drive_activity(
             agent,
             drive,
