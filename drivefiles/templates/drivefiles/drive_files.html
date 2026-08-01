@@ -475,7 +475,15 @@
                                     <div class="activity-item-left">
                                         <span class="activity-badge {{ item.badge_class|default:'activity-badge-info' }}">{{ item.type_label|default:'Change' }}</span>
                                         <div class="activity-details">
-                                            <span class="activity-file-name" title="{{ item.file_name|default:'File' }}">{{ item.file_name|default:'File' }}</span>
+                                            {% if item.type_key == 'renamed' and item.old_name %}
+                                                <div class="activity-rename-box">
+                                                    <span class="activity-file-box activity-old-box" title="{{ item.old_name }}">{{ item.old_name }}</span>
+                                                    <span class="activity-rename-arrow">➔</span>
+                                                    <span class="activity-file-box activity-new-box" title="{{ item.file_name }}">{{ item.file_name }}</span>
+                                                </div>
+                                            {% else %}
+                                                <span class="activity-file-name" title="{{ item.file_name|default:'File' }}">{{ item.file_name|default:'File' }}</span>
+                                            {% endif %}
                                             <span class="activity-meta">{{ item.details|default:'Activity recorded' }}</span>
                                         </div>
                                     </div>
